@@ -92,6 +92,79 @@ fn note_repeat_advances_through_the_chord_progression_every_eight_ticks() {
 }
 
 #[test]
+fn repeat_requests_one_new_progression_only_at_the_full_cycle_boundary() {
+    for mode in [NotePlaybackMode::Repeat, NotePlaybackMode::Auto] {
+        let mut state = KeyboardState::default();
+        let origin = Instant::now();
+        state.set_detected_voicing(PatchVoicing::Poly);
+        state.replace_repeat_chords(vec![vec![60], vec![62, 65]], origin, false);
+        state.cycle_note_playback(origin);
+        if mode == NotePlaybackMode::Repeat {
+            state.cycle_note_playback(origin);
+        }
+        let generation = state.periodic_generation();
+        let mut calls = 0;
+        for step in 1..=24 {
+            let at = at_tick(origin, step);
+            state.apply_scheduled_progression(at - Duration::from_millis(200));
+            let tick = state
+                .poll_periodic_tick_with_progression(at, |boundary| {
+                    assert_eq!(boundary, at);
+                    calls += 1;
+                    Some(vec![vec![67, 71, 74]])
+                })
+                .unwrap();
+            assert_eq!(tick.at, at);
+            assert_eq!(calls, usize::from(step >= 16) + usize::from(step >= 24));
+            if step == 8 {
+                assert_eq!(
+                    tick.messages,
+                    vec![[0x80, 60, 0], [0x90, 62, 100], [0x90, 65, 100]]
+                );
+            }
+            if step == 16 {
+                assert_eq!(
+                    tick.messages,
+                    vec![
+                        [0x80, 62, 0],
+                        [0x80, 65, 0],
+                        [0x90, 67, 100],
+                        [0x90, 71, 100],
+                        [0x90, 74, 100],
+                    ]
+                );
+                assert_eq!(
+                    state.repeat_chords().len(),
+                    2,
+                    "lookahead keeps the applied target"
+                );
+                assert_eq!(state.repeat_chords_at(at).len(), 1);
+                assert_eq!(state.sounding_position(at).unwrap().chord_index, 0);
+            }
+            assert_eq!(state.periodic_generation(), generation);
+            assert_eq!(state.periodic_anchor(), Some(origin));
+        }
+    }
+}
+
+#[test]
+fn off_controller_ticks_never_request_a_progression() {
+    let mut state = KeyboardState::default();
+    let origin = Instant::now();
+    state.replace_repeat_chords(vec![vec![60]], origin, false);
+    state.toggle_cc_periodic(origin);
+    for step in 1..=24 {
+        let tick = state
+            .poll_periodic_tick_with_progression(at_tick(origin, step), |_| {
+                panic!("off must not request a progression")
+            })
+            .unwrap();
+        assert!(tick.messages.iter().all(|message| message[0] == 0xB0));
+        assert_eq!(state.repeat_chords()[0][0].midi_note, 60);
+    }
+}
+
+#[test]
 fn note_repeat_does_nothing_without_chord() {
     let mut state = KeyboardState::default();
     assert!(state.cycle_note_playback(Instant::now()).is_empty());

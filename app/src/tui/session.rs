@@ -250,6 +250,9 @@ impl<'a> TuiApp<'a> {
                 keyboard_mml_input,
                 super::keyboard::KeyboardNoteGuide::new(keyboard_note_guide_overlay_date),
             )
+            .with_chord_progression_source(super::keyboard_glue::keyboard_catalog_source_from(
+                chord_progression_source.clone(),
+            ))
             .with_effect_plugins(keyboard_effect_plugins)
             .with_effect_chain(keyboard_effect_chain),
             loop_browser: {

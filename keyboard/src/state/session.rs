@@ -83,6 +83,7 @@ impl KeyboardState {
             note_playback_mode: NotePlaybackMode::Off,
             detected_voicing: PatchVoicing::Unknown,
             repeat_chords: Vec::new(),
+            scheduled_progression: None,
             repeat_chord_index: 0,
             repeat_sounding: Vec::new(),
             arp_sounding: None,
@@ -104,12 +105,16 @@ impl KeyboardState {
     /// MML 入力欄と effect chain は `KeyboardScreen` が持つので、MML は呼び出し側から渡し、
     /// chain は呼び出し側が埋める。
     pub(crate) fn session_state(&self, mml: String) -> KeyboardSessionState {
+        self.session_state_at(mml, Instant::now())
+    }
+
+    pub(crate) fn session_state_at(&self, mml: String, now: Instant) -> KeyboardSessionState {
         KeyboardSessionState {
             patch: self.patch.clone(),
             buffer_multiplier: self.buffer_multiplier,
             note_playback_mode: self.note_playback_mode,
             repeat_chords: self
-                .repeat_chords
+                .repeat_chords_at(now)
                 .iter()
                 .map(|chord| chord.iter().map(|note| note.midi_note).collect())
                 .collect(),

@@ -14,6 +14,7 @@ mod note_columns;
 mod note_mode_bar;
 mod patch_panes;
 mod playback_status;
+mod progression;
 mod share_notice;
 
 fn buffer_to_string(terminal: &Terminal<TestBackend>) -> String {

@@ -58,7 +58,9 @@ pub fn draw(
     // 「一覧に出ていない音色がある」ことの案内。help 行の上へ、行数ぶんだけ場所を取る。
     // 案内が無いときは 1 行も増えないので、ふだんの見え方は変わらない。
     let catalog_notes = screen.state.patch_catalog.catalog_notes().to_vec();
-    let help_height = 3 + u16::try_from(catalog_notes.len()).unwrap_or(0);
+    let help_height = 3
+        + u16::try_from(catalog_notes.len()).unwrap_or(0)
+        + u16::from(screen.random_chord_error().is_some());
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -118,6 +120,9 @@ pub fn draw(
         .iter()
         .map(|note| Line::from(Span::styled(note.clone(), base_style().fg(MONOKAI_PINK))))
         .collect();
+    if let Some(error) = screen.random_chord_error() {
+        help_lines.push(Line::styled(error.to_string(), base_style().fg(Color::Red)));
+    }
     help_lines.extend(keyboard_help_lines(
         screen.note_guide.presentation(),
         screen.state.navigation_count.value(),
@@ -147,7 +152,7 @@ pub fn draw(
 fn keyboard_pane_width(state: &KeyboardState, now: Instant) -> u16 {
     let content = [
         note_playback_mode_line(state).width(),
-        note_columns_width(state),
+        note_columns_width(state, now),
         controller_status_width(state),
         note_playback_status_line(state, now).width(),
         KEYBOARD_PANE_TITLE.len(),

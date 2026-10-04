@@ -19,7 +19,7 @@ const MIN_COLUMN_WIDTH: usize = 4;
 /// `now` の時点で鳴っている音（押さえている PC キー・repeat/arp の発音）に色を付ける。
 pub(super) fn note_column_lines(state: &KeyboardState, now: Instant) -> [Line<'static>; 2] {
     let sounding = sounding_notes(state, now);
-    let columns = note_columns(state, &sounding);
+    let columns = note_columns(state, now, &sounding);
     let width = column_width(&columns);
 
     let mut keys = vec![Span::styled(PC_KEY_LABEL, base_style())];
@@ -43,8 +43,8 @@ pub(super) fn note_column_lines(state: &KeyboardState, now: Instant) -> [Line<'s
 }
 
 /// PC key 行と Note 行の表示幅。発音中の音は数えないので、鳴らしている間も幅は変わらない。
-pub(super) fn note_columns_width(state: &KeyboardState) -> usize {
-    let columns = note_columns(state, &[false; 128]);
+pub(super) fn note_columns_width(state: &KeyboardState, now: Instant) -> usize {
+    let columns = note_columns(state, now, &[false; 128]);
     NOTE_LABEL.len() + column_width(&columns) * columns.len()
 }
 
@@ -78,7 +78,7 @@ fn sounding_notes(state: &KeyboardState, now: Instant) -> [bool; 128] {
         match position.arp {
             Some(step) => sounding[usize::from(step.note.midi_note)] = true,
             None => {
-                let chord = state.repeat_chords().get(position.chord_index);
+                let chord = state.repeat_chords_at(now).get(position.chord_index);
                 for note in chord.into_iter().flatten() {
                     sounding[usize::from(note.midi_note)] = true;
                 }
@@ -89,12 +89,12 @@ fn sounding_notes(state: &KeyboardState, now: Instant) -> [bool; 128] {
 }
 
 /// 列に並べる音。鳴っている音は進行から外れていても列に入れ、色を付ける場所を必ず持たせる。
-fn note_columns(state: &KeyboardState, sounding: &[bool; 128]) -> Vec<u8> {
+fn note_columns(state: &KeyboardState, now: Instant, sounding: &[bool; 128]) -> Vec<u8> {
     let mut present = *sounding;
     for note in KEYBOARD_NOTES {
         present[usize::from(note.midi_note)] = true;
     }
-    for chord in state.repeat_chords() {
+    for chord in state.repeat_chords_at(now) {
         let notes = if state.note_playback_uses_arp() {
             arp_sequence(chord)
         } else {

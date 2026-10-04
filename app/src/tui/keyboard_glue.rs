@@ -4,7 +4,7 @@
 //! フィールド（mode / active_screen / cfg / patch_load_state / voicing / playback）に
 //! 触れる薄い接続層だけを残す。
 
-use std::time::Instant;
+use std::{sync::Arc, time::Instant};
 
 use crossterm::event::KeyEvent;
 
@@ -15,6 +15,13 @@ use crate::tui::keyboard::{
 };
 use crate::tui::voicing::VoicingState;
 use crate::tui::{Mode, PatchLoadState, PlayState, PrimaryScreen, TuiApp};
+
+/// Keyboardだけを開く場合も共有catalogを使う。呼ぶのは有効化操作のときだけ。
+pub(in crate::tui) fn keyboard_catalog_source_from(
+    source: crate::chord_progression_source::ChordProgressionSource,
+) -> Arc<dyn Fn() -> cmrt_chord::ChordProgressionCatalog + Send + Sync> {
+    Arc::new(move || source.catalog())
+}
 
 impl KeyboardVoicingLookup for VoicingState {
     fn cached_voicing(&self, patch: &str) -> Option<PatchVoicing> {

@@ -27,6 +27,7 @@ mod guitar_articulation_repeat;
 mod guitar_articulation_sample_midi;
 mod guitar_articulation_smf_material;
 mod keyboard_mml;
+mod keyboard_random_chord;
 mod mml_overlay;
 mod normal_mode;
 mod screen_switch;

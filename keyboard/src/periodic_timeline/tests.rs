@@ -255,6 +255,52 @@ fn arp_polled_ahead_schedules_each_tick_on_the_anchor_grid() {
 }
 
 #[test]
+fn progression_replacement_keeps_old_off_and_new_first_on_on_the_boundary_timeline() {
+    for (mode, boundary_step, old_note) in [
+        (NotePlaybackMode::Repeat, 16_u32, 65),
+        (NotePlaybackMode::Arp, 4_u32, 77),
+    ] {
+        let origin = Instant::now();
+        let mut state = KeyboardState::from_session(KeyboardSessionState {
+            note_playback_mode: mode,
+            repeat_chords: vec![vec![60], vec![65]],
+            ..KeyboardSessionState::default()
+        });
+        let mut timeline = PeriodicTimeline::default();
+        let mut next_id = ids(1);
+        let refresh = state.take_pending_refresh_messages(origin);
+        timeline.plan(origin, refresh, None, &mut next_id);
+        let generation = state.periodic_generation();
+        let mut calls = 0;
+        for step in 1..=boundary_step {
+            let deadline = origin + Duration::from_millis(250) * step;
+            let sent_at = deadline - LOOKAHEAD;
+            let tick = state.poll_periodic_tick_with_progression(sent_at + LOOKAHEAD, |_| {
+                calls += 1;
+                Some(vec![vec![62]])
+            });
+            let sends = timeline.plan(sent_at, Vec::new(), tick, &mut next_id);
+            assert!(sends
+                .iter()
+                .all(|send| matches!(send, TimelineSend::Scheduled(_))));
+            if step == boundary_step {
+                let seconds = f64::from(boundary_step) * 0.25;
+                assert_eq!(
+                    scheduled(&sends),
+                    vec![
+                        (1, seconds, [0x80, old_note, 0]),
+                        (1, seconds, [0x90, 62, 100]),
+                    ]
+                );
+            }
+        }
+        assert_eq!(calls, 1);
+        assert_eq!(state.periodic_generation(), generation);
+        assert_eq!(state.periodic_anchor(), Some(origin));
+    }
+}
+
+#[test]
 fn stop_keeps_periodic_sending_stopped_until_restart() {
     let origin = Instant::now();
     let mut timeline = PeriodicTimeline::default();

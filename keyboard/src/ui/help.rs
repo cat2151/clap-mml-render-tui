@@ -24,7 +24,7 @@ pub(super) fn draw_overlay(f: &mut Frame<'_>) {
     f.render_widget(Paragraph::new(lines).style(base_style()), inner);
 }
 
-const HELP_ROWS: [&str; 25] = [
+const HELP_ROWS: [&str; 26] = [
     " ── 共通操作 ──",
     " c d e f g a b    音符を演奏(Effect focusでは c e f g)",
     " h/l ←/→         paneのfocusを移動",
@@ -41,6 +41,7 @@ const HELP_ROWS: [&str; 25] = [
     " Shift+Z         CC周期を切替",
     " Shift+H         buffer倍率を切替",
     " i               KeyboardのMML notes入力(Enter確定 / Esc取消)",
+    " Shift+I         ランダムchord進行mode切替(有効化時に1つ生成)",
     " y               共有コマンドをコピー",
     " n / w           Notepad / DAWへ移動",
     " Ctrl+G / Ctrl+P  画面切替メニュー / 共通MML overlay(helpを閉じて利用)",

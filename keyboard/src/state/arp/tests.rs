@@ -1,5 +1,7 @@
 use super::*;
 
+mod progression;
+
 fn press_and_release(state: &mut KeyboardState, notes: &[KeyboardNote]) {
     for note in notes {
         assert!(state.press(*note).is_some());

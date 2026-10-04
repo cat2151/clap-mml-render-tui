@@ -9,6 +9,7 @@ use cmrt_tui_core::random::RandomIndexDeck;
 
 mod arp;
 mod periodic;
+mod progression;
 mod session;
 mod sounding;
 
@@ -102,6 +103,8 @@ pub struct KeyboardState {
     detected_voicing: PatchVoicing,
     // repeat/arp対象のコード進行。手鍵盤では最後に押した和音を1要素として保持する
     repeat_chords: Vec<Vec<PlaybackNote>>,
+    // 周回の先読みで予約した次進行。確定対象への反映は実音のdeadlineで行う。
+    scheduled_progression: Option<progression::ScheduledProgression>,
     // repeat/arpで現在再生しているコード進行上の位置
     repeat_chord_index: usize,
     // note repeatで現在発音中のノート

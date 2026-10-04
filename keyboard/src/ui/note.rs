@@ -28,12 +28,12 @@ pub(super) fn note_playback_status_line(state: &KeyboardState, now: Instant) -> 
         "Repeat: "
     };
     let mut spans = vec![Span::styled(label, base_style())];
-    if state.repeat_chords().is_empty() {
+    if state.repeat_chords_at(now).is_empty() {
         spans.push(Span::styled("-", base_style()));
         return Line::from(spans);
     }
     let position = state.sounding_position(now);
-    for (chord_index, chord) in state.repeat_chords().iter().enumerate() {
+    for (chord_index, chord) in state.repeat_chords_at(now).iter().enumerate() {
         if chord_index > 0 {
             spans.push(Span::styled(" | ", base_style()));
         }

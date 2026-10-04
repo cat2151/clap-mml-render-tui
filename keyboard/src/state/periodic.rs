@@ -162,6 +162,16 @@ impl KeyboardState {
 
     /// `now` までにdeadlineを迎えたtickを高々1つ進める。
     pub fn poll_periodic_tick(&mut self, now: Instant) -> Option<PeriodicTick> {
+        self.apply_scheduled_progression(now);
+        self.poll_periodic_tick_with_progression(now, |_| None)
+    }
+
+    /// 次進行の供給は、全コードを鳴らし終えた境界でだけ呼ぶ。
+    pub(crate) fn poll_periodic_tick_with_progression(
+        &mut self,
+        now: Instant,
+        mut next: impl FnMut(Instant) -> Option<Vec<Vec<u8>>>,
+    ) -> Option<PeriodicTick> {
         let at = deadline_elapsed(&mut self.periodic_next_at, now)?;
         self.draw_next_combo();
         let digits = self.combo_digits();
@@ -193,11 +203,13 @@ impl KeyboardState {
                             .drain(..)
                             .map(|note| note_off(note.midi_note)),
                     );
-                    self.advance_repeat_chord();
+                    self.advance_progression(at, &mut next);
                     messages.extend(self.attack_repeat_chord(at));
                 }
             }
-            NotePlaybackMode::Arp | NotePlaybackMode::Auto => messages.extend(self.advance_arp(at)),
+            NotePlaybackMode::Arp | NotePlaybackMode::Auto => {
+                messages.extend(self.advance_arp(at, &mut next))
+            }
             NotePlaybackMode::Repeat => unreachable!(),
         }
         Some(PeriodicTick { at, messages })

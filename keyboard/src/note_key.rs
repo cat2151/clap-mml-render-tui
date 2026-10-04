@@ -14,6 +14,7 @@ impl KeyboardScreen<'_> {
             return KeyboardAction::Continue;
         };
         if !self.connection_status().phase.accepts_notes() {
+            self.discard_random_chord_progression();
             self.state.take_reset_messages();
             return KeyboardAction::Continue;
         }
@@ -41,6 +42,7 @@ impl KeyboardScreen<'_> {
             return;
         };
         if !self.connection_status().phase.accepts_notes() {
+            self.discard_random_chord_progression();
             self.state.take_reset_messages();
             return;
         }

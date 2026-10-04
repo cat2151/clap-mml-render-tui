@@ -2,6 +2,7 @@ use cmrt_core::EffectPlugins;
 use cmrt_patch_select::plugin_menu::PluginMenu;
 
 use super::periodic_timeline::PeriodicTimeline;
+use super::random_chord::RandomChordMode;
 use super::{
     KeyboardEffectPane, KeyboardMidiSender, KeyboardMmlInput, KeyboardNoteGuide,
     KeyboardPatchFilterInput, KeyboardState,
@@ -23,6 +24,7 @@ pub struct KeyboardScreen<'a> {
     pub(crate) share_notice: Option<String>,
     /// 周期送信を予約している live timeline。
     pub(crate) periodic_timeline: PeriodicTimeline,
+    pub(crate) random_chord: RandomChordMode,
 }
 
 impl<'a> KeyboardScreen<'a> {
@@ -44,6 +46,7 @@ impl<'a> KeyboardScreen<'a> {
             help_open: false,
             share_notice: None,
             periodic_timeline: PeriodicTimeline::default(),
+            random_chord: RandomChordMode::default(),
         }
     }
 

@@ -32,6 +32,14 @@ impl<'a> KeyboardMmlInput<'a> {
         &self.last_confirmed
     }
 
+    /// 自動生成した確定済み値を反映する。編集中のbufferと変換エラーは維持する。
+    pub(crate) fn set_confirmed(&mut self, value: String) {
+        self.last_confirmed = value;
+        if !self.active {
+            self.error = None;
+        }
+    }
+
     pub fn is_active(&self) -> bool {
         self.active
     }

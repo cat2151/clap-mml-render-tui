@@ -4,14 +4,11 @@
 //! からは `KeyboardContext` で必要な情報を注入してもらう。app 側との接続は
 //! app crate の `tui::keyboard_glue` にある。
 
-use std::time::Instant;
-
-use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
-
 mod catalog;
 mod effect_pane;
 pub mod guide;
 mod help;
+mod input;
 mod logging;
 mod mml_input;
 mod navigation;
@@ -20,6 +17,7 @@ mod numeric_input;
 mod patch_filter_input;
 mod periodic_timeline;
 mod plugin_menu;
+mod random_chord;
 mod screen;
 mod screen_runtime;
 mod sender;
@@ -93,6 +91,8 @@ impl KeyboardContext<'_> {
 impl KeyboardScreen<'_> {
     /// 画面へ入るときの初期化。`patch` で選択音色を差し替える。
     pub fn start(&mut self, patch: Option<String>, ctx: &KeyboardContext<'_>) {
+        self.apply_random_chord_progression(std::time::Instant::now());
+        self.discard_random_chord_progression();
         self.mml_input.cancel();
         self.patch_filter.close();
         self.plugin_menu = None;
@@ -107,6 +107,7 @@ impl KeyboardScreen<'_> {
 
     /// 直前の状態を保ったまま画面へ戻るときの初期化。
     pub fn resume(&mut self, ctx: &KeyboardContext<'_>) {
+        self.discard_random_chord_progression();
         self.mml_input.cancel();
         self.patch_filter.close();
         self.plugin_menu = None;
@@ -158,284 +159,29 @@ impl KeyboardScreen<'_> {
 
     /// アプリ終了で保存する状態。
     pub fn session_state(&self) -> session_state::KeyboardSessionState {
+        self.session_state_at(std::time::Instant::now())
+    }
+
+    pub(crate) fn session_state_at(
+        &self,
+        now: std::time::Instant,
+    ) -> session_state::KeyboardSessionState {
+        let mml = self
+            .random_chord
+            .pending_mml
+            .as_ref()
+            .filter(|(at, _)| *at <= now)
+            .map_or_else(|| self.mml_input.last_confirmed(), |(_, mml)| mml);
         session_state::KeyboardSessionState {
             effect_chain: self.effect.chain().to_vec(),
-            ..self
-                .state
-                .session_state(self.mml_input.last_confirmed().to_string())
+            ..self.state.session_state_at(mml.to_string(), now)
         }
     }
 
     pub fn finish(&mut self) {
+        self.apply_random_chord_progression(std::time::Instant::now());
+        self.discard_random_chord_progression();
         let note_offs = self.state.take_leave_messages();
         self.stop_sending(note_offs);
-    }
-
-    pub fn handle_key(&mut self, key: KeyEvent, ctx: &KeyboardContext<'_>) -> KeyboardAction {
-        // 共有の通知は次の Press で閉じる。そのキーは食わずに以下の通常処理へ流す。
-        if key.kind == KeyEventKind::Press {
-            self.share_notice = None;
-        }
-        if self.mml_input.is_active() {
-            return self.handle_mml_input_key(key);
-        }
-        if self.patch_filter.is_active() {
-            return self.handle_patch_filter_key(key, ctx);
-        }
-        if self.plugin_menu.is_some() {
-            return self.handle_plugin_menu_key(key, ctx);
-        }
-        if self.effect.is_adding() {
-            return self.handle_effect_add_key(key);
-        }
-        if key.kind == KeyEventKind::Repeat {
-            return KeyboardAction::Continue;
-        }
-        // 数値入力モード中はPressを入力操作として消費する。Releaseだけは通常処理へ
-        // 流し、押しっぱなしのノートが鳴りっぱなしになるのを防ぐ。
-        if self.state.numeric_input().is_some() && key.kind == KeyEventKind::Press {
-            match key.code {
-                KeyCode::Char(digit @ '0'..='9') => {
-                    self.state.numeric_input_push(digit);
-                }
-                KeyCode::Backspace => {
-                    self.state.numeric_input_backspace();
-                }
-                KeyCode::Esc => {
-                    self.state.cancel_numeric_input();
-                }
-                KeyCode::Enter => {
-                    let message = self.state.confirm_numeric_input();
-                    if let Some(message) = message {
-                        if self.connection_status().phase.accepts_notes() {
-                            if let Some(sender) = &self.midi_sender {
-                                sender.send(vec![message], self.state.patch());
-                            }
-                        }
-                    }
-                }
-                _ => {}
-            }
-            return KeyboardAction::Continue;
-        }
-        if let Some(action) = self.handle_help_key(key) {
-            return action;
-        }
-        if let Some(action) = self.handle_effect_pane_key(key) {
-            return action;
-        }
-        if key.kind == KeyEventKind::Press {
-            if key.modifiers == KeyModifiers::NONE {
-                if let KeyCode::Char(digit @ '0'..='9') = key.code {
-                    if self.state.navigation_count.push_digit(digit) {
-                        return KeyboardAction::Continue;
-                    }
-                }
-                match key.code {
-                    KeyCode::Char('j') => {
-                        let delta = self.state.navigation_count.take_delta(1);
-                        self.move_focused_cursor(delta, ctx);
-                        return KeyboardAction::Continue;
-                    }
-                    KeyCode::Char('k') => {
-                        let delta = self.state.navigation_count.take_delta(-1);
-                        self.move_focused_cursor(delta, ctx);
-                        return KeyboardAction::Continue;
-                    }
-                    KeyCode::Char('l') => {
-                        let delta = self.state.navigation_count.take_delta(1);
-                        self.move_focus(delta, ctx);
-                        return KeyboardAction::Continue;
-                    }
-                    KeyCode::Char('h') => {
-                        let delta = self.state.navigation_count.take_delta(-1);
-                        self.move_focus(delta, ctx);
-                        return KeyboardAction::Continue;
-                    }
-                    _ => {}
-                }
-            } else if key.modifiers == KeyModifiers::CONTROL {
-                match key.code {
-                    KeyCode::Char('d') => {
-                        let delta = self.state.navigation_count.take_delta(10);
-                        self.move_focused_cursor(delta, ctx);
-                        return KeyboardAction::Continue;
-                    }
-                    KeyCode::Char('u') => {
-                        let delta = self.state.navigation_count.take_delta(-10);
-                        self.move_focused_cursor(delta, ctx);
-                        return KeyboardAction::Continue;
-                    }
-                    _ => {}
-                }
-            }
-            self.state.navigation_count.clear();
-        }
-        if key.kind == KeyEventKind::Press
-            && matches!(key.modifiers, KeyModifiers::NONE | KeyModifiers::SHIFT)
-            && key.code == KeyCode::Char('/')
-        {
-            self.open_patch_filter(ctx);
-            return KeyboardAction::Continue;
-        }
-        if plugin_menu::is_plugin_menu_key(key) {
-            self.open_plugin_menu(ctx);
-            return KeyboardAction::Continue;
-        }
-        if key.kind == KeyEventKind::Press
-            && key.modifiers == KeyModifiers::SHIFT
-            && matches!(key.code, KeyCode::Char('h' | 'H'))
-        {
-            let multiplier = self.state.cycle_buffer_multiplier();
-            if let Some(sender) = &self.midi_sender {
-                sender.set_buffer_multiplier(multiplier);
-            }
-            return KeyboardAction::Continue;
-        }
-        if key.kind == KeyEventKind::Press
-            && key.modifiers == KeyModifiers::SHIFT
-            && matches!(key.code, KeyCode::Char('z' | 'Z'))
-        {
-            if self.connection_status().phase.accepts_notes() {
-                let message = self.state.toggle_cc_periodic(Instant::now());
-                if let Some(sender) = &self.midi_sender {
-                    sender.send(vec![message], self.state.patch());
-                }
-            }
-            return KeyboardAction::Continue;
-        }
-        if key.kind == KeyEventKind::Press && key.modifiers == KeyModifiers::NONE {
-            match key.code {
-                KeyCode::Down => {
-                    self.move_focused_cursor(1, ctx);
-                    return KeyboardAction::Continue;
-                }
-                KeyCode::Up => {
-                    self.move_focused_cursor(-1, ctx);
-                    return KeyboardAction::Continue;
-                }
-                KeyCode::Right => {
-                    self.move_focus(1, ctx);
-                    return KeyboardAction::Continue;
-                }
-                KeyCode::Left => {
-                    self.move_focus(-1, ctx);
-                    return KeyboardAction::Continue;
-                }
-                KeyCode::PageDown => {
-                    self.move_focused_cursor(10, ctx);
-                    return KeyboardAction::Continue;
-                }
-                KeyCode::PageUp => {
-                    self.move_focused_cursor(-10, ctx);
-                    return KeyboardAction::Continue;
-                }
-                KeyCode::End => {
-                    self.move_focused_to_end(ctx);
-                    return KeyboardAction::Continue;
-                }
-                KeyCode::Home => {
-                    self.move_focused_to_start(ctx);
-                    return KeyboardAction::Continue;
-                }
-                KeyCode::Char('v') => {
-                    self.state.cycle_velocity(Instant::now());
-                    return KeyboardAction::Continue;
-                }
-                KeyCode::Char('m') => {
-                    if self.connection_status().phase.accepts_notes() {
-                        let message = self.state.cycle_modulation(Instant::now());
-                        if let Some(sender) = &self.midi_sender {
-                            sender.send(vec![message], self.state.patch());
-                        }
-                    }
-                    return KeyboardAction::Continue;
-                }
-                KeyCode::Char('p') => {
-                    if self.connection_status().phase.accepts_notes() {
-                        let message = self.state.cycle_pitch_bend(Instant::now());
-                        if let Some(sender) = &self.midi_sender {
-                            sender.send(vec![message], self.state.patch());
-                        }
-                    }
-                    return KeyboardAction::Continue;
-                }
-                KeyCode::Char('t') => {
-                    if self.connection_status().phase.accepts_notes() {
-                        let messages = self.state.cycle_note_playback(Instant::now());
-                        self.send_after_cancel(messages);
-                    }
-                    return KeyboardAction::Continue;
-                }
-                KeyCode::Char('y') => {
-                    self.copy_share_command();
-                    return KeyboardAction::Continue;
-                }
-                KeyCode::Char('i') => {
-                    self.mml_input.open();
-                    return KeyboardAction::Continue;
-                }
-                KeyCode::Char('x') => {
-                    self.state.begin_numeric_input(NumericInputTarget::CcNumber);
-                    return KeyboardAction::Continue;
-                }
-                KeyCode::Char('z') => {
-                    self.state.begin_numeric_input(NumericInputTarget::CcValue);
-                    return KeyboardAction::Continue;
-                }
-                KeyCode::Char('r')
-                    if matches!(
-                        self.connection_status().phase,
-                        KeyboardConnectionPhase::Error(_)
-                    ) =>
-                {
-                    self.state.take_reset_messages();
-                    self.prepare_connection(ctx);
-                    return KeyboardAction::Continue;
-                }
-                KeyCode::Char('r') => {
-                    self.select_random_patch(ctx);
-                    return KeyboardAction::Continue;
-                }
-                KeyCode::Char('n') => {
-                    self.finish();
-                    return KeyboardAction::ReturnToNotepad;
-                }
-                KeyCode::Char('w') => {
-                    self.finish();
-                    return KeyboardAction::LaunchDaw;
-                }
-                KeyCode::Char('q') => {
-                    self.finish();
-                    return KeyboardAction::Quit;
-                }
-                _ => {}
-            }
-        }
-        self.handle_note_key(key)
-    }
-
-    fn handle_mml_input_key(&mut self, key: KeyEvent) -> KeyboardAction {
-        if key.kind == KeyEventKind::Release {
-            self.release_note_while_typing(key);
-            return KeyboardAction::Continue;
-        }
-
-        match key.code {
-            KeyCode::Esc => self.mml_input.cancel(),
-            KeyCode::Enter => {
-                if let Some(progression) = self.mml_input.confirm() {
-                    let ready = self.connection_status().phase.accepts_notes();
-                    let messages =
-                        self.state
-                            .replace_repeat_chords(progression, Instant::now(), ready);
-                    if ready {
-                        self.send_after_cancel(messages);
-                    }
-                }
-            }
-            _ => self.mml_input.input(key),
-        }
-        KeyboardAction::Continue
     }
 }

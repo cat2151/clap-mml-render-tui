@@ -126,6 +126,7 @@ mod direct_patch_select;
 mod draw;
 mod effect_chain;
 mod helpers;
+mod mixer_help;
 mod mml_overlay;
 mod overlay;
 mod screen_switch;

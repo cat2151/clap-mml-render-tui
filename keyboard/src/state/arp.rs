@@ -9,22 +9,8 @@ impl KeyboardState {
         now: Instant,
         restart_now: bool,
     ) -> Vec<[u8; 3]> {
-        self.repeat_chords = progression
-            .into_iter()
-            .filter_map(|midi_notes| {
-                let mut seen = [false; 128];
-                let chord = midi_notes
-                    .into_iter()
-                    .filter(|&note| {
-                        let is_new = !seen[usize::from(note)];
-                        seen[usize::from(note)] = true;
-                        is_new
-                    })
-                    .map(|midi_note| PlaybackNote { midi_note })
-                    .collect::<Vec<_>>();
-                (!chord.is_empty()).then_some(chord)
-            })
-            .collect();
+        self.repeat_chords = progression::playback_chords(progression);
+        self.scheduled_progression = None;
         self.reset_progression_position();
         self.repeat_elapsed_ticks = 0;
         self.sounding.clear();
@@ -129,17 +115,23 @@ impl KeyboardState {
         self.reset_progression_position();
         self.repeat_elapsed_ticks = 0;
         self.restart_periodic_clock(now);
-        self.attack_next_arp(now).into_iter().collect()
+        self.attack_next_arp(now, &mut |_| None)
+            .into_iter()
+            .collect()
     }
 
-    pub(super) fn advance_arp(&mut self, at: Instant) -> Vec<[u8; 3]> {
+    pub(super) fn advance_arp(
+        &mut self,
+        at: Instant,
+        next: &mut impl FnMut(Instant) -> Option<Vec<Vec<u8>>>,
+    ) -> Vec<[u8; 3]> {
         let mut messages: Vec<[u8; 3]> = self
             .arp_sounding
             .take()
             .map(|note| note_off(note.midi_note))
             .into_iter()
             .collect();
-        if let Some(attack) = self.attack_next_arp(at) {
+        if let Some(attack) = self.attack_next_arp(at, next) {
             messages.push(attack);
         } else {
             self.sounding.clear();
@@ -149,13 +141,17 @@ impl KeyboardState {
         messages
     }
 
-    fn attack_next_arp(&mut self, at: Instant) -> Option<[u8; 3]> {
+    fn attack_next_arp(
+        &mut self,
+        at: Instant,
+        next: &mut impl FnMut(Instant) -> Option<Vec<Vec<u8>>>,
+    ) -> Option<[u8; 3]> {
         let mut sequence = arp_sequence(self.current_repeat_chord());
         if sequence.is_empty() {
             return None;
         }
         if self.arp_next_index >= sequence.len() {
-            self.advance_repeat_chord();
+            self.advance_progression(at, next);
             self.arp_next_index = 0;
             sequence = arp_sequence(self.current_repeat_chord());
         }
@@ -174,16 +170,10 @@ impl KeyboardState {
     }
 
     pub(super) fn current_repeat_chord(&self) -> &[PlaybackNote] {
-        self.repeat_chords
+        self.playback_progression()
             .get(self.repeat_chord_index)
             .map(Vec::as_slice)
             .unwrap_or_default()
-    }
-
-    pub(super) fn advance_repeat_chord(&mut self) {
-        if !self.repeat_chords.is_empty() {
-            self.repeat_chord_index = (self.repeat_chord_index + 1) % self.repeat_chords.len();
-        }
     }
 
     pub(super) fn reset_progression_position(&mut self) {

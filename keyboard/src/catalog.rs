@@ -409,6 +409,8 @@ impl KeyboardScreen<'_> {
         if previous_patch.as_deref() == Some(patch.as_str()) {
             return;
         }
+        self.apply_random_chord_progression(std::time::Instant::now());
+        self.discard_random_chord_progression();
         // 自動送信系(周期modeやON状態)はpatch変更をまたいで維持する。
         // note offのみ送り、Ready復帰後にrefreshで現在値を新patchへ再送する。
         let note_offs = self.state.take_note_off_messages();

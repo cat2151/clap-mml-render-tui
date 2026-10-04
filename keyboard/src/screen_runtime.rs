@@ -13,13 +13,18 @@ impl KeyboardScreen<'_> {
             self.connection_status().phase.accepts_notes() && !self.periodic_timeline.is_stopped();
         let first_overlay_today = self.note_guide.tick(now, ready, local_date);
         if !ready {
+            if self.discard_random_chord_progression() {
+                self.state.restart_committed_progression(now, false);
+            }
             // 接続し直し・音色の差し替えの間に、張っていた timeline は当てにできなくなる。
             self.periodic_timeline.forget();
             return first_overlay_today;
         }
+        self.apply_random_chord_progression(now);
         // patch切替後の現在値再送(refresh)は即時、周期送信は LOOKAHEAD 先までを予約する
         let refresh = self.state.take_pending_refresh_messages(now);
-        let tick = self.state.poll_periodic_tick(now + LOOKAHEAD);
+        let tick = self.poll_random_chord_tick(now + LOOKAHEAD);
+        self.apply_random_chord_progression(now);
         if self.midi_sender.is_some() {
             let sends = self
                 .periodic_timeline
@@ -33,10 +38,10 @@ impl KeyboardScreen<'_> {
     ///
     /// 呼び出し側は Ready を確かめてから呼ぶこと。
     pub(crate) fn send_after_cancel(&mut self, messages: Vec<[u8; 3]>) {
+        self.periodic_timeline.request_cancel();
         if self.midi_sender.is_none() {
             return;
         }
-        self.periodic_timeline.request_cancel();
         let sends = self
             .periodic_timeline
             .plan(Instant::now(), messages, None, next_timeline_id);
