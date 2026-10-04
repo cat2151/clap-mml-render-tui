@@ -247,6 +247,10 @@ impl KeyboardState {
             }
             NotePlaybackMode::Repeat => unreachable!(),
         }
+        // 復元直後や画面へ戻った直後は、周期 mode が on でもクロックが止まっている
+        if self.periodic_next_at.is_none() && self.periodic_digits_active() {
+            self.restart_periodic_clock(now);
+        }
         messages
     }
 
@@ -269,7 +273,7 @@ impl KeyboardState {
             || self.cc_periodic_on
     }
 
-    fn periodic_active(&self) -> bool {
+    pub(super) fn periodic_active(&self) -> bool {
         self.periodic_digits_active() || self.note_playback_mode != NotePlaybackMode::Off
     }
 

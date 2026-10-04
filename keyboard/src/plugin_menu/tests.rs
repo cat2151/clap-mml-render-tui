@@ -189,6 +189,12 @@ fn lowercase_solos_and_the_condition_narrows_the_patches_pane() {
     // 今の音色（Floe）が消えたので、残った先頭の音色を鳴らせる状態にする。
     assert_eq!(screen.state.patch(), Some("Warm Pad.vvp"));
 
+    // 選んだ時点の一覧で Patches pane の幅を測り直す。
+    assert_eq!(
+        screen.state.patch_catalog.patch_name_width(),
+        "Warm Pad.vvp".len()
+    );
+
     // `/` の欄は menu が書いた条件に空白を1つ足して始まる。
     press(&mut screen, '/', &ctx);
     assert_eq!(screen.patch_filter.value(), "plugin:vaporizer2 ");

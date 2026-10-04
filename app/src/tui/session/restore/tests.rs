@@ -1,7 +1,9 @@
 use super::apply_startup_keyboard;
 use crate::history::KeyboardSessionState;
 use crate::screen_switch::PrimaryScreen;
-use cmrt_tui_core::keyboard_session_state::NotePlaybackMode;
+use cmrt_tui_core::keyboard_session_state::{
+    KeyboardControllerState, ModulationMode, NotePlaybackMode,
+};
 
 fn saved_keyboard() -> KeyboardSessionState {
     KeyboardSessionState {
@@ -12,6 +14,10 @@ fn saved_keyboard() -> KeyboardSessionState {
         mml: "d".to_string(),
         effect_chain: vec![serde_json::json!({"TONE3000 preset": "x"})],
         patch_filter: "p:surge".to_string(),
+        controllers: KeyboardControllerState {
+            modulation: ModulationMode::Periodic,
+            ..KeyboardControllerState::default()
+        },
     }
 }
 

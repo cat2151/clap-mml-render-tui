@@ -8,6 +8,7 @@ use ratatui::{backend::TestBackend, style::Modifier, Terminal};
 
 mod controller;
 mod effect_pane;
+mod keyboard_pane;
 mod note_columns;
 mod note_mode_bar;
 mod patch_panes;

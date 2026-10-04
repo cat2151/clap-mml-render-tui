@@ -110,15 +110,29 @@ pub fn draw_chain_pane(
         );
         return;
     }
+    let text_width = usize::from(block.inner(area).width).saturating_sub(LIST_PREFIX_WIDTH);
     let items: Vec<ListItem<'_>> = editor
         .chain
         .iter()
         .enumerate()
         .map(|(index, stage)| {
-            list_item(
-                format!("{}. {}", index + 1, stage_label(stage, catalog)),
-                index == editor.cursor,
-            )
+            let number = format!("{}. ", index + 1);
+            let rows = wrap_words(&stage_label(stage, catalog), text_width, number.len());
+            // 2 行目以降は `list_item` の行頭記号が付かないので、その幅も字下げに含める。
+            let indent = " ".repeat(LIST_PREFIX_WIDTH + number.len());
+            let text = rows
+                .iter()
+                .enumerate()
+                .map(|(row, label)| {
+                    let head = if row == 0 { &number } else { &indent };
+                    format!("{head}{label}")
+                })
+                .collect::<Vec<_>>()
+                .join(
+                    "
+",
+                );
+            list_item(text, index == editor.cursor)
         })
         .collect();
     let mut list_state = scrolled_list_state(
@@ -300,6 +314,38 @@ fn scrolled_list_state(
     ListState::default()
         .with_offset(offset)
         .with_selected(selected)
+}
+
+/// `list_item` が行頭に付ける `▶ ` / 空白 2 桁の幅。
+const LIST_PREFIX_WIDTH: usize = 2;
+
+/// `text` を表示幅 `width` の行へ折り返す。各行の頭には `indent` 桁の字下げが付く前提で、
+/// その分を引いた幅に収める。空白で切れるところは空白で切り、1 語が収まらなければ語の途中で切る。
+fn wrap_words(text: &str, width: usize, indent: usize) -> Vec<String> {
+    let width = width.saturating_sub(indent).max(1);
+    let mut rows = Vec::new();
+    let mut row = String::new();
+    let mut row_width = 0;
+    for word in text.split_inclusive(' ') {
+        let word_width = Line::from(word.trim_end()).width();
+        if row_width > 0 && row_width + word_width > width {
+            rows.push(row.trim_end().to_string());
+            row.clear();
+            row_width = 0;
+        }
+        for ch in word.chars() {
+            let ch_width = Line::from(ch.to_string()).width();
+            if row_width > 0 && row_width + ch_width > width && ch != ' ' {
+                rows.push(row.trim_end().to_string());
+                row.clear();
+                row_width = 0;
+            }
+            row.push(ch);
+            row_width += ch_width;
+        }
+    }
+    rows.push(row.trim_end().to_string());
+    rows
 }
 
 fn list_item(text: String, is_selected: bool) -> ListItem<'static> {

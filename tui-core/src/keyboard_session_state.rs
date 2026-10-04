@@ -1,6 +1,8 @@
 //! 起動・終了で保存・復元する keyboard 画面のセッション状態。
 
 const DEFAULT_KEYBOARD_BUFFER_MULTIPLIER: u8 = 4;
+const DEFAULT_CC_NUMBER: u8 = 1;
+const CC_MAX: u8 = 127;
 
 /// keyboard 画面の `t`（note 再生モード）。
 ///
@@ -13,6 +15,68 @@ pub enum NotePlaybackMode {
     Repeat,
     Arp,
     Auto,
+}
+
+/// keyboard 画面の `v`（velocity）。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VelocityMode {
+    #[default]
+    Normal,
+    Accent,
+    Periodic,
+}
+
+/// keyboard 画面の `m`（modulation）。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ModulationMode {
+    #[default]
+    Off,
+    On,
+    Periodic,
+}
+
+/// keyboard 画面の `p`（pitch bend）。
+///
+/// `Idle` は「一度も `p` を押していない」初期状態。巡回は
+/// Max→CenterAfterMax→Min→CenterAfterMin→Periodic→CenterAfterCycle→Max→… で、Idle には戻らない。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PitchBendMode {
+    #[default]
+    Idle,
+    Max,
+    CenterAfterMax,
+    Min,
+    CenterAfterMin,
+    Periodic,
+    CenterAfterCycle,
+}
+
+/// keyboard 画面のコントローラ（`v` `m` `p` `x` `Z`）の選択。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct KeyboardControllerState {
+    pub velocity: VelocityMode,
+    pub modulation: ModulationMode,
+    pub pitch_bend: PitchBendMode,
+    /// `x` で選んだ CC 番号。`Z` の周期送信先。
+    pub cc_number: u8,
+    /// `Z` の周期送信が on か。
+    pub cc_periodic: bool,
+}
+
+impl Default for KeyboardControllerState {
+    fn default() -> Self {
+        Self {
+            velocity: VelocityMode::Normal,
+            modulation: ModulationMode::Off,
+            pitch_bend: PitchBendMode::Idle,
+            cc_number: DEFAULT_CC_NUMBER,
+            cc_periodic: false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -35,6 +99,8 @@ pub struct KeyboardSessionState {
     /// Patches pane の絞り込み条件。plugin solo/mute もこの条件の plugin term として入る。
     #[serde(default)]
     pub patch_filter: String,
+    #[serde(default)]
+    pub controllers: KeyboardControllerState,
 }
 
 impl Default for KeyboardSessionState {
@@ -47,6 +113,7 @@ impl Default for KeyboardSessionState {
             mml: String::new(),
             effect_chain: Vec::new(),
             patch_filter: String::new(),
+            controllers: KeyboardControllerState::default(),
         }
     }
 }
@@ -63,6 +130,9 @@ impl KeyboardSessionState {
             .and_then(|patch| (!patch.trim().is_empty()).then_some(patch));
         if !matches!(self.buffer_multiplier, 1 | 2 | 4 | 8) {
             self.buffer_multiplier = DEFAULT_KEYBOARD_BUFFER_MULTIPLIER;
+        }
+        if self.controllers.cc_number > CC_MAX {
+            self.controllers.cc_number = DEFAULT_CC_NUMBER;
         }
     }
 }

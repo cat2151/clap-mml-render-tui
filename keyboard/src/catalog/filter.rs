@@ -45,7 +45,7 @@ impl KeyboardPatchCatalog {
     }
 
     pub(crate) fn focus_patches(&mut self) {
-        self.focus = PatchPaneFocus::Patches;
+        self.set_focus(PatchPaneFocus::Patches);
     }
 
     /// Role / Preset / 条件のどれかが変わった後に、Patches pane の一覧を作り直す。

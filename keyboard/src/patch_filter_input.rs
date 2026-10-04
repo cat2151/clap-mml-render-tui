@@ -87,6 +87,7 @@ impl KeyboardScreen<'_> {
             // 不正な条件では閉じない。欄の赤枠を見て直してもらう。
             if !self.patch_filter.invalid {
                 self.patch_filter.close();
+                self.state.patch_catalog.measure_patch_list();
             }
             return KeyboardAction::Continue;
         }
@@ -94,6 +95,7 @@ impl KeyboardScreen<'_> {
             let before = std::mem::take(&mut self.patch_filter.before);
             self.patch_filter.close();
             self.apply_patch_filter(&before, ctx);
+            self.state.patch_catalog.measure_patch_list();
             return KeyboardAction::Continue;
         }
         if apply_key_event_to_textarea(&mut self.patch_filter.textarea, key) {

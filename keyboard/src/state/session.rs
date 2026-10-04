@@ -30,7 +30,40 @@ impl KeyboardState {
             default_repeat_chords(session.note_playback_mode)
         };
         let _ = state.replace_repeat_chords(chords, Instant::now(), false);
+        state.set_controller_state(session.controllers);
+        state.refresh_pending = state.has_state_to_refresh();
         state
+    }
+
+    pub(super) fn controller_state(&self) -> KeyboardControllerState {
+        KeyboardControllerState {
+            velocity: self.velocity_mode,
+            modulation: self.modulation_mode,
+            pitch_bend: self.pitch_bend_mode,
+            cc_number: self.cc_number,
+            cc_periodic: self.cc_periodic_on,
+        }
+    }
+
+    /// 選択だけを置き換える。送信と周期クロックの張り直しは次の Ready の再送が担う。
+    pub(super) fn set_controller_state(&mut self, controllers: KeyboardControllerState) {
+        self.velocity_mode = controllers.velocity;
+        self.velocity = match controllers.velocity {
+            VelocityMode::Accent => ACCENT_VELOCITY,
+            VelocityMode::Normal => DEFAULT_VELOCITY,
+            VelocityMode::Periodic => VELOCITY_SEQ[0],
+        };
+        self.modulation_mode = controllers.modulation;
+        self.pitch_bend_mode = controllers.pitch_bend;
+        self.cc_number = controllers.cc_number.min(CC_MAX);
+        self.cc_periodic_on = controllers.cc_periodic;
+    }
+
+    /// 次の Ready で送り直す・周期クロックを張り直す必要がある選択か。
+    pub(super) fn has_state_to_refresh(&self) -> bool {
+        self.periodic_active()
+            || self.modulation_mode != ModulationMode::Off
+            || self.pitch_bend_mode != PitchBendMode::Idle
     }
 
     fn from_session_without_target(session: &KeyboardSessionState) -> Self {
@@ -45,7 +78,7 @@ impl KeyboardState {
             velocity_mode: VelocityMode::default(),
             modulation_mode: ModulationMode::default(),
             pitch_bend_mode: PitchBendMode::default(),
-            cc_number: DEFAULT_CC_NUMBER,
+            cc_number: MODULATION_CC,
             cc_periodic_on: false,
             note_playback_mode: NotePlaybackMode::Off,
             detected_voicing: PatchVoicing::Unknown,
@@ -83,6 +116,7 @@ impl KeyboardState {
             mml,
             effect_chain: Vec::new(),
             patch_filter: self.patch_catalog.filter().to_string(),
+            controllers: self.controller_state(),
         }
     }
 }

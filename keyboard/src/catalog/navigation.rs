@@ -32,7 +32,15 @@ impl KeyboardPatchCatalog {
     pub(crate) fn move_focus(&mut self, delta: isize) {
         let last = PatchPaneFocus::ORDER.len() - 1;
         let next = self.focus.index().saturating_add_signed(delta).min(last);
-        self.focus = PatchPaneFocus::ORDER[next];
+        self.set_focus(PatchPaneFocus::ORDER[next]);
+    }
+
+    /// focus を移す。Patches pane へ入ったときは、そこまでに Role / Preset で選んだ一覧で幅を測り直す。
+    pub(super) fn set_focus(&mut self, focus: PatchPaneFocus) {
+        if focus == PatchPaneFocus::Patches && self.focus != PatchPaneFocus::Patches {
+            self.measure_patch_list();
+        }
+        self.focus = focus;
     }
 
     /// focus 中の pane のカーソルを動かす。音色が変わったときだけ `Some`。
@@ -101,7 +109,7 @@ impl KeyboardPatchCatalog {
     ///
     /// 同じ音色を続けて引かないよう、一覧を 1 周するまで抽選済みを除く。
     pub(crate) fn select_random_patch(&mut self) -> Option<String> {
-        self.focus = PatchPaneFocus::Patches;
+        self.set_focus(PatchPaneFocus::Patches);
         let deck_key = (self.role_cursor, self.preset_cursor, self.filter.clone());
         if self.random_deck_key.as_ref() != Some(&deck_key) {
             self.clear_random_deck();

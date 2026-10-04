@@ -39,8 +39,11 @@ pub(super) fn cells(terminal: &Terminal<TestBackend>, prefix: &str) -> Vec<(Stri
     let mut result: Vec<(String, Color)> = Vec::new();
     let mut current: Option<(String, Color)> = None;
     // keyboard pane の内側（右枠の手前）まで読む。
-    for x in start..73 {
+    for x in start..buffer.area.width {
         let cell = buffer.cell((x, y)).unwrap();
+        if cell.symbol() == "│" {
+            break;
+        }
         if cell.symbol() == " " {
             result.extend(current.take());
         } else {

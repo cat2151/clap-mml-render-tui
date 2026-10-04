@@ -29,17 +29,20 @@ mod patch_panes;
 mod share_notice;
 
 use connection_overlay::draw_connection_overlay;
-use controller::controller_status_lines;
+use controller::{controller_status_lines, controller_status_width};
 use effect::{draw_effect_add_overlay, draw_effect_pane};
 use guide::{draw_note_guide_overlay, keyboard_help_lines};
 use mml_overlay::draw_mml_input_overlay;
 use note::{note_playback_mode_line, note_playback_status_line};
-use note_columns::note_column_lines;
-use patch_panes::{draw_patch_selector, effect_pane_width};
+use note_columns::{note_column_lines, note_columns_width};
+use patch_panes::{draw_patch_selector, PatchSelectorWidths};
 use share_notice::draw_share_notice_overlay;
 
-/// keyboard pane の幅。中身の最長行と、上へ重ねる overlay の上限幅（72 + 枠 2）に合わせる。
-const KEYBOARD_PANE_WIDTH: u16 = 74;
+/// keyboard pane の幅の上限。上へ重ねる overlay の上限幅（72 + 枠 2）に合わせる。
+const KEYBOARD_PANE_MAX_WIDTH: u16 = 74;
+/// keyboard pane の中身の右に空ける桁数。
+const KEYBOARD_PANE_MARGIN: usize = 2;
+const KEYBOARD_PANE_TITLE: &str = " [KEYBOARD] ";
 
 /// keyboard 画面を描画する。
 ///
@@ -63,13 +66,17 @@ pub fn draw(
             Constraint::Length(help_height),
         ])
         .split(f.area());
-    let effect_w = effect_pane_width(chunks[0].width.saturating_sub(KEYBOARD_PANE_WIDTH));
+    let keyboard_w = keyboard_pane_width(&screen.state, now);
+    let selector_widths = PatchSelectorWidths::new(
+        &screen.state.patch_catalog,
+        chunks[0].width.saturating_sub(keyboard_w),
+    );
     let panes = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Length(KEYBOARD_PANE_WIDTH),
-            Constraint::Min(0),
-            Constraint::Length(effect_w),
+            Constraint::Length(keyboard_w),
+            Constraint::Length(selector_widths.total()),
+            Constraint::Fill(1),
         ])
         .split(chunks[0]);
 
@@ -78,6 +85,7 @@ pub fn draw(
     draw_patch_selector(
         &mut screen.state.patch_catalog,
         &screen.patch_filter,
+        &selector_widths,
         f,
         panes[1],
     );
@@ -131,6 +139,23 @@ pub fn draw(
     draw_note_guide_overlay(screen.note_guide.presentation(), f, f.area());
 }
 
+/// 周期で変わる値は最大の桁で測るので、和音や操作のモードを変えない限り演奏中も同じ幅になる。
+fn keyboard_pane_width(state: &KeyboardState, now: Instant) -> u16 {
+    let content = [
+        note_playback_mode_line(state).width(),
+        note_columns_width(state),
+        controller_status_width(state),
+        note_playback_status_line(state, now).width(),
+        KEYBOARD_PANE_TITLE.len(),
+    ]
+    .into_iter()
+    .max()
+    .unwrap_or(0);
+    u16::try_from(content + KEYBOARD_PANE_MARGIN + 2)
+        .unwrap_or(u16::MAX)
+        .min(KEYBOARD_PANE_MAX_WIDTH)
+}
+
 fn draw_keyboard(state: &KeyboardState, now: Instant, f: &mut Frame<'_>, area: Rect) {
     let [pc_key_line, note_line] = note_column_lines(state, now);
     let mut lines = vec![
@@ -152,7 +177,7 @@ fn draw_keyboard(state: &KeyboardState, now: Instant, f: &mut Frame<'_>, area: R
         Paragraph::new(lines).style(base_style()).block(
             Block::default()
                 .borders(Borders::ALL)
-                .title(" [KEYBOARD] ")
+                .title(KEYBOARD_PANE_TITLE)
                 .style(base_style())
                 .border_style(base_style().fg(MONOKAI_FG)),
         ),

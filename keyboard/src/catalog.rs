@@ -4,6 +4,7 @@
 //! 「今どの一覧を見ていて、その中のどれが現在の音色か」だけを持つ。
 
 mod filter;
+mod list_width;
 mod navigation;
 
 use std::collections::BTreeMap;
@@ -33,6 +34,8 @@ pub struct KeyboardPatchCatalog {
     status: KeyboardPatchCatalogStatus,
     /// selector 順に整列済みの全音色。
     entries: Vec<PatchCatalogEntry>,
+    /// Patches pane の幅に使う、最後に測った時点の一覧の最長の音色名の表示幅。
+    patch_name_width: usize,
     presets: PreparedPresets,
     /// `presets` を作ったときのユーザー正規表現。snapshot 側と違えば作り直す。
     role_presets: Vec<(String, String)>,
@@ -62,6 +65,7 @@ impl Default for KeyboardPatchCatalog {
         Self {
             status: KeyboardPatchCatalogStatus::Loading,
             entries: Vec::new(),
+            patch_name_width: 0,
             presets: empty_presets(),
             role_presets: Vec::new(),
             load_measurements: BTreeMap::new(),
@@ -110,6 +114,7 @@ impl KeyboardPatchCatalog {
     fn clear_with_status(&mut self, status: KeyboardPatchCatalogStatus) {
         self.status = status;
         self.entries.clear();
+        self.patch_name_width = 0;
         self.presets = empty_presets();
         self.role_presets.clear();
         self.load_measurements.clear();
@@ -138,6 +143,7 @@ impl KeyboardPatchCatalog {
         self.role_cursor = 0;
         self.preset_cursor = 0;
         self.rebuild_list();
+        self.measure_patch_list();
         self.patch_cursor = self.position_of(current_patch);
     }
 
@@ -154,6 +160,7 @@ impl KeyboardPatchCatalog {
         let last = self.presets().len().saturating_sub(1);
         self.preset_cursor = self.preset_cursor.min(last);
         self.rebuild_list();
+        self.measure_patch_list();
         self.patch_cursor = self.position_of(current_patch);
     }
 

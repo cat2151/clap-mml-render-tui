@@ -1,5 +1,7 @@
 use crate::cli::{parse_cli_from, CliAction};
-use cmrt_tui_core::keyboard_session_state::{KeyboardSessionState, NotePlaybackMode};
+use cmrt_tui_core::keyboard_session_state::{
+    KeyboardControllerState, KeyboardSessionState, NotePlaybackMode,
+};
 
 fn parse_kb(args: &[&str]) -> anyhow::Result<KeyboardSessionState> {
     let mut argv = vec!["cmrt", "kb"];
@@ -129,6 +131,7 @@ fn share_command_round_trips_through_kb_parse() {
                 mml: String::new(),
                 effect_chain: vec![effect.clone(), bypassed.clone()],
                 patch_filter: String::new(),
+                controllers: KeyboardControllerState::default(),
             },
             None,
         ),

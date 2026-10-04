@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 use crossterm::event::KeyCode;
 
 use super::{KeyboardPatchCatalog, NavigationCount, NumericInput, NumericInputTarget};
-use crate::session_state::KeyboardSessionState;
+use crate::session_state::{KeyboardControllerState, KeyboardSessionState};
 use cmrt_realtime_play::PatchVoicing;
 use cmrt_tui_core::random::RandomIndexDeck;
 
@@ -34,7 +34,6 @@ const CONTROL_CHANGE: u8 = 0xB0;
 const MODULATION_CC: u8 = 1;
 const DEFAULT_VELOCITY: u8 = 100;
 const ACCENT_VELOCITY: u8 = 127;
-const DEFAULT_CC_NUMBER: u8 = MODULATION_CC;
 const MODULATION_MAX: u8 = 127;
 const CC_MAX: u8 = 127;
 const PITCH_BEND: u8 = 0xE0;
@@ -57,38 +56,7 @@ const VELOCITY_SEQ: [u8; 2] = [DEFAULT_VELOCITY, ACCENT_VELOCITY];
 const MODULATION_SEQ: [u8; 2] = [0, MODULATION_MAX];
 const CC_SEQ: [u8; 2] = [CC_MAX, 0];
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
-pub enum VelocityMode {
-    #[default]
-    Normal,
-    Accent,
-    Periodic,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
-pub enum ModulationMode {
-    #[default]
-    Off,
-    On,
-    Periodic,
-}
-
-// Idleは「一度もpを押していない」初期状態。
-// サイクルはIdle→Max→CenterAfterMax→Min→CenterAfterMin→Periodic→CenterAfterCycle→Max→…
-// (+8191, 0, -8192, 0, 4値循環, 0 の6段。Idleには戻らない)
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
-pub enum PitchBendMode {
-    #[default]
-    Idle,
-    Max,
-    CenterAfterMax,
-    Min,
-    CenterAfterMin,
-    Periodic,
-    CenterAfterCycle,
-}
-
-pub use crate::session_state::NotePlaybackMode;
+pub use crate::session_state::{ModulationMode, NotePlaybackMode, PitchBendMode, VelocityMode};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct KeyboardNote {
@@ -326,12 +294,15 @@ impl KeyboardState {
         messages
     }
 
-    /// 画面を出るときの消音。`t` のモードは保存と次の入場のために残し、次の Ready で鳴らし直す。
+    /// 画面を出るときの消音。`t` とコントローラの選択は保存と次の入場のために残し、
+    /// 次の Ready で送り直す。
     pub(super) fn take_leave_messages(&mut self) -> Vec<[u8; 3]> {
         let mode = self.note_playback_mode;
+        let controllers = self.controller_state();
         let messages = self.take_reset_messages();
         self.note_playback_mode = mode;
-        self.refresh_pending = mode != NotePlaybackMode::Off;
+        self.set_controller_state(controllers);
+        self.refresh_pending = self.has_state_to_refresh();
         messages
     }
 

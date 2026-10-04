@@ -20,12 +20,7 @@ const MIN_COLUMN_WIDTH: usize = 4;
 pub(super) fn note_column_lines(state: &KeyboardState, now: Instant) -> [Line<'static>; 2] {
     let sounding = sounding_notes(state, now);
     let columns = note_columns(state, &sounding);
-    let width = columns
-        .iter()
-        .map(|&note| midi_note_name(note).len() + 1)
-        .max()
-        .unwrap_or(0)
-        .max(MIN_COLUMN_WIDTH);
+    let width = column_width(&columns);
 
     let mut keys = vec![Span::styled(PC_KEY_LABEL, base_style())];
     let mut notes = vec![Span::styled(NOTE_LABEL, base_style())];
@@ -45,6 +40,21 @@ pub(super) fn note_column_lines(state: &KeyboardState, now: Instant) -> [Line<'s
         );
     }
     [Line::from(keys), Line::from(notes)]
+}
+
+/// PC key 行と Note 行の表示幅。発音中の音は数えないので、鳴らしている間も幅は変わらない。
+pub(super) fn note_columns_width(state: &KeyboardState) -> usize {
+    let columns = note_columns(state, &[false; 128]);
+    NOTE_LABEL.len() + column_width(&columns) * columns.len()
+}
+
+fn column_width(columns: &[u8]) -> usize {
+    columns
+        .iter()
+        .map(|&note| midi_note_name(note).len() + 1)
+        .max()
+        .unwrap_or(0)
+        .max(MIN_COLUMN_WIDTH)
 }
 
 fn push_cell(spans: &mut Vec<Span<'static>>, text: String, width: usize, lit: bool) {

@@ -68,3 +68,33 @@ fn the_add_panes_list_presets_by_plugin_name() {
     assert!(screen.contains("AmpSimulator"), "screen:\n{screen}");
     assert!(screen.contains("TestAmpClean"), "screen:\n{screen}");
 }
+
+#[test]
+fn a_long_stage_name_wraps_under_its_number_in_a_narrow_pane() {
+    let catalog = crate::test_catalog::catalog();
+    let editor = EffectChainEditor::open(vec![json!({"Test Amp preset": "Clean"})]);
+    let mut terminal = Terminal::new(TestBackend::new(14, 5)).unwrap();
+    terminal
+        .draw(|f| {
+            let block = Block::default().borders(Borders::ALL);
+            draw_chain_pane(f, f.area(), block, &editor, Some(&catalog), "");
+        })
+        .unwrap();
+    let buffer = terminal.backend().buffer();
+    let row = |y: u16| {
+        (0..buffer.area.width)
+            .map(|x| buffer[(x, y)].symbol())
+            .collect::<String>()
+    };
+
+    // 枠の内側は 12 桁。`▶ 1. ` の 5 桁を引いた 7 桁に収まらない語は次の行へ送り、番号の後ろへ揃える。
+    assert_eq!(row(1), "│▶ 1. Test   │");
+    assert_eq!(row(2), "│     Amp:   │");
+    assert_eq!(row(3), "│     Clean  │");
+}
+
+#[test]
+fn wrap_words_splits_a_word_longer_than_the_row() {
+    assert_eq!(wrap_words("Supermassive", 10, 3), ["Superma", "ssive"]);
+    assert_eq!(wrap_words("A B", 10, 3), ["A B"]);
+}

@@ -54,6 +54,7 @@ impl KeyboardScreen<'_> {
             PluginMenuKey::Chosen(condition) => {
                 self.plugin_menu = None;
                 self.apply_patch_filter(&condition, ctx);
+                self.state.patch_catalog.measure_patch_list();
             }
         }
         KeyboardAction::Continue

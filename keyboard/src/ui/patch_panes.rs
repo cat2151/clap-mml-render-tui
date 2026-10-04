@@ -24,19 +24,50 @@ const FILTER_INPUT_HEIGHT: u16 = 3;
 
 const CATEGORY_COLUMN_WIDTH: u16 = 12;
 const LOAD_COLUMN_WIDTH: u16 = 7;
+/// Patches 表の音色名以外の幅。枠 2 + `▶ ` 2 + Category + Load + 列の間 2。
+const PATCH_TABLE_FIXED_WIDTH: u16 = 2 + 2 + CATEGORY_COLUMN_WIDTH + LOAD_COLUMN_WIDTH + 2;
 
-/// keyboard pane の右に残った幅のうち Effect pane が取る幅。残り幅の 1/5 を 16〜28 に収める。
-pub(super) fn effect_pane_width(remaining: u16) -> u16 {
+/// keyboard pane の右に残った幅のうち Effect pane に必ず残す幅。残り幅の 1/5 を 16〜28 に収める。
+fn effect_pane_min_width(remaining: u16) -> u16 {
     (remaining / 5).clamp(16, 28)
 }
 
-/// Patch selector の枠の内側の幅を Role / Preset / Patches に割る。overlay と同じ式。
-fn selector_pane_widths(inner_width: u16) -> [Constraint; 3] {
-    [
-        Constraint::Length((inner_width / 5).clamp(12, 22)),
-        Constraint::Length((inner_width / 4).clamp(14, 30)),
-        Constraint::Min(12),
-    ]
+/// Patch selector の中の Role / Preset / Patches の幅。
+pub(super) struct PatchSelectorWidths {
+    role: u16,
+    preset: u16,
+    patches: u16,
+}
+
+impl PatchSelectorWidths {
+    /// keyboard pane の右に残った幅 `remaining` から決める。Role / Preset は overlay と同じ式で、
+    /// Patches は最後に測った一覧の最長名に合わせる（いつ測るかは `catalog/list_width.rs`）。
+    /// Patches が使わない幅は Effect pane に回る。一覧が空の間は、理由の文言が切れないよう最大まで取る。
+    pub(super) fn new(catalog: &KeyboardPatchCatalog, remaining: u16) -> Self {
+        let inner_max = remaining
+            .saturating_sub(effect_pane_min_width(remaining))
+            .saturating_sub(2);
+        let role = (inner_max / 5).clamp(12, 22);
+        let preset = (inner_max / 4).clamp(14, 30);
+        let patches_max = inner_max.saturating_sub(role + preset).max(12);
+        let patches = match catalog.patch_name_width() {
+            0 => patches_max,
+            name => u16::try_from(name)
+                .unwrap_or(u16::MAX)
+                .saturating_add(PATCH_TABLE_FIXED_WIDTH)
+                .min(patches_max),
+        };
+        Self {
+            role,
+            preset,
+            patches,
+        }
+    }
+
+    /// 外枠を含めた Patch selector 全体の幅。
+    pub(super) fn total(&self) -> u16 {
+        self.role + self.preset + self.patches + 2
+    }
 }
 
 /// Role / Preset / Patches を 1 つの「Patch selector」の枠で囲んで描く。
@@ -44,6 +75,7 @@ fn selector_pane_widths(inner_width: u16) -> [Constraint; 3] {
 pub(super) fn draw_patch_selector(
     catalog: &mut KeyboardPatchCatalog,
     filter_input: &KeyboardPatchFilterInput<'_>,
+    widths: &PatchSelectorWidths,
     f: &mut Frame<'_>,
     area: Rect,
 ) {
@@ -56,7 +88,11 @@ pub(super) fn draw_patch_selector(
     f.render_widget(block, area);
     let panes = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints(selector_pane_widths(inner.width))
+        .constraints([
+            Constraint::Length(widths.role),
+            Constraint::Length(widths.preset),
+            Constraint::Min(widths.patches),
+        ])
         .split(inner);
     draw_patch_panes(catalog, filter_input, f, panes[0], panes[1], panes[2]);
 }

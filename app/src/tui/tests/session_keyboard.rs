@@ -126,3 +126,58 @@ fn the_keyboard_effect_chain_survives_quit_and_restart() {
 
     std::fs::remove_dir_all(&tmp).ok();
 }
+
+#[test]
+fn keyboard_controller_selections_survive_quit_and_restart() {
+    use crate::tui::keyboard::{ModulationMode, PitchBendMode, VelocityMode};
+
+    let unique = NEXT_TEST_ID.fetch_add(1, Ordering::Relaxed);
+    let tmp = std::env::temp_dir().join(format!(
+        "cmrt_test_keyboard_controller_restore_{}_{}",
+        std::process::id(),
+        unique
+    ));
+    std::fs::remove_dir_all(&tmp).ok();
+    let _env_guards = crate::test_utils::set_local_dir_envs(&tmp);
+
+    let mut app = TuiApp::new_for_test(test_config());
+    app.start_keyboard(Some("patches_factory/Keys/Piano.fxp".to_string()));
+    press(&mut app, KeyCode::Char('v'));
+    press(&mut app, KeyCode::Char('v'));
+    for code in [KeyCode::Char('x'), KeyCode::Char('7'), KeyCode::Char('4')] {
+        press(&mut app, code);
+    }
+    press(&mut app, KeyCode::Enter);
+    // m / p / Z のキーは接続が Ready のときだけ効く。テストには server が無いので、
+    // キーが呼ぶのと同じ遷移を直接進める。
+    let now = std::time::Instant::now();
+    let _ = app.keyboard.state.cycle_modulation(now);
+    let _ = app.keyboard.state.cycle_pitch_bend(now);
+    let _ = app.keyboard.state.cycle_pitch_bend(now);
+    let _ = app.keyboard.state.toggle_cc_periodic(now);
+    press(&mut app, KeyCode::Char('q'));
+    app.save_history_state();
+
+    let saved = crate::history::load_session_state().keyboard.controllers;
+    assert_eq!(saved.velocity, VelocityMode::Periodic);
+    assert_eq!(saved.modulation, ModulationMode::On);
+    assert_eq!(saved.pitch_bend, PitchBendMode::CenterAfterMax);
+    assert_eq!(saved.cc_number, 74);
+    assert!(saved.cc_periodic);
+
+    let cfg = test_config();
+    let mut restored = TuiApp::new(&cfg, cmrt_offline_render::EffectPlugins::none());
+    let state = &mut restored.keyboard.state;
+    assert_eq!(state.velocity_mode(), VelocityMode::Periodic);
+    assert_eq!(state.modulation_mode(), ModulationMode::On);
+    assert_eq!(state.pitch_bend_mode(), PitchBendMode::CenterAfterMax);
+    assert_eq!(state.cc_number(), 74);
+    assert!(state.cc_periodic_on());
+    // 最初の Ready で現在値を送り直す
+    let refresh = state.take_pending_refresh_messages(now);
+    assert!(refresh.contains(&[0xB0, 1, 127]), "{refresh:?}");
+    assert!(refresh.contains(&[0xE0, 0x00, 0x40]), "{refresh:?}");
+    assert!(refresh.contains(&[0xB0, 74, 127]), "{refresh:?}");
+
+    std::fs::remove_dir_all(&tmp).ok();
+}

@@ -16,6 +16,21 @@ const PITCH_BEND_ORDER: [(PitchBendMode, &str); 6] = [
 
 /// コントローラの行。1 つの操作につき 1 行で、巡回する選択肢を全部並べ、今の選択肢に色を付ける。
 pub(super) fn controller_status_lines(state: &KeyboardState) -> [Line<'static>; 4] {
+    controller_lines(state, state.combo_progress())
+}
+
+/// コントローラの行の最大表示幅。tick ごとに増える Combo の引いた数は総数の桁で測るので、
+/// 演奏中に値が変わっても同じ幅を返す。
+pub(super) fn controller_status_width(state: &KeyboardState) -> usize {
+    let combo = state.combo_progress().map(|(_, total)| (total, total));
+    controller_lines(state, combo)
+        .iter()
+        .map(Line::width)
+        .max()
+        .unwrap_or(0)
+}
+
+fn controller_lines(state: &KeyboardState, combo: Option<(usize, usize)>) -> [Line<'static>; 4] {
     let velocity = state.velocity_mode();
     let periodic_velocity = format!("cyc({})", state.velocity());
     let modulation = state.modulation_mode();
@@ -32,7 +47,7 @@ pub(super) fn controller_status_lines(state: &KeyboardState) -> [Line<'static>; 
         'Z',
         [("off", !cc_periodic), ("cyc", cc_periodic)],
     ));
-    if let Some((drawn, total)) = state.combo_progress() {
+    if let Some((drawn, total)) = combo {
         cc_line.push(Span::styled(
             format!("  Combo: {drawn}/{total}"),
             base_style(),

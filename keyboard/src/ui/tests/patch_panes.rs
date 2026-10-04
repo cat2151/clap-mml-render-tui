@@ -1,7 +1,7 @@
 use super::*;
 use cmrt_tui_core::theme::MONOKAI_FG;
 
-/// 200 桁では keyboard pane が 74 桁で終わり、右の Patch selector の枠の内側に
+/// 200 桁では keyboard pane が中身の幅で終わり、右の Patch selector の枠の内側に
 /// Role / Preset / Patches が並ぶ。focus 中（初期は Patches）の枠だけが黄色。
 #[test]
 fn the_screen_draws_role_preset_and_patch_panes_inside_the_patch_selector_frame() {
@@ -61,31 +61,42 @@ fn the_screen_draws_role_preset_and_patch_panes_inside_the_patch_selector_frame(
         .map(|line| line.chars().collect())
         .collect();
     let (top, inner_top) = (&rows[0], &rows[1]);
-    assert_eq!(top[73], '┐', "{screen_text}");
-    assert_eq!(top[74], '┌', "{screen_text}");
+    // 0 行目の左上の角は keyboard / Patch selector / Effect の 3 つ。
+    let [_, selector_x, effect_x] = corners(top, '┌')[..] else {
+        panic!("{screen_text}");
+    };
+    assert!(selector_x < 74, "{screen_text}");
+    assert_eq!(top[selector_x - 1], '┐', "{screen_text}");
     assert!(
-        top[74..]
+        top[selector_x..]
             .iter()
             .collect::<String>()
             .starts_with("┌ Patch selector ─"),
         "{screen_text}"
     );
-    assert_eq!(top[174], '┐', "{screen_text}");
-    assert_eq!(top[175], '┌', "{screen_text}");
-    assert_eq!(inner_top[74], '│', "{screen_text}");
-    assert_eq!(inner_top[75], '┌', "{screen_text}");
-    assert_eq!(inner_top[94], '┌', "{screen_text}");
-    assert_eq!(inner_top[118], '┌', "{screen_text}");
-    assert_eq!(inner_top[173], '┐', "{screen_text}");
-    assert_eq!(inner_top[174], '│', "{screen_text}");
+    assert_eq!(top[effect_x - 1], '┐', "{screen_text}");
+    // 1 行目の左上の角は Role / Preset / Patches の 3 つで、Patch selector の枠の内側に収まる。
+    let inner = corners(inner_top, '┌');
+    let [role_x, preset_x, patches_x] = inner[..] else {
+        panic!("{screen_text}");
+    };
+    assert_eq!(inner_top[selector_x], '│', "{screen_text}");
+    assert_eq!(role_x, selector_x + 1, "{screen_text}");
+    assert_eq!(inner_top[effect_x - 2], '┐', "{screen_text}");
+    assert_eq!(inner_top[effect_x - 1], '│', "{screen_text}");
 
     let buffer = terminal.backend().buffer();
-    let border_color = |x: u16, y: u16| buffer.cell((x, y)).unwrap().fg;
+    let border_color = |x: usize, y: u16| buffer.cell((x as u16, y)).unwrap().fg;
     assert_eq!(border_color(0, 0), MONOKAI_FG);
-    assert_eq!(border_color(74, 0), MONOKAI_FG);
-    assert_eq!(border_color(75, 1), MONOKAI_FG);
-    assert_eq!(border_color(94, 1), MONOKAI_FG);
-    assert_eq!(border_color(118, 1), MONOKAI_YELLOW);
+    assert_eq!(border_color(selector_x, 0), MONOKAI_FG);
+    assert_eq!(border_color(role_x, 1), MONOKAI_FG);
+    assert_eq!(border_color(preset_x, 1), MONOKAI_FG);
+    assert_eq!(border_color(patches_x, 1), MONOKAI_YELLOW);
+}
+
+/// `row` の中で `ch` がある桁。
+fn corners(row: &[char], ch: char) -> Vec<usize> {
+    (0..row.len()).filter(|&x| row[x] == ch).collect()
 }
 
 struct NoVoicing;
@@ -145,21 +156,28 @@ fn the_filter_input_sits_at_the_bottom_of_the_patches_pane() {
     }
 
     // Patch selector の外枠は y=0..26（下 4 行は status と help）。その内側の Patches pane は
-    // x=118..174・y=1..25 で、Patches の枠の内側の最下段 3 行は y=21..24。
+    // y=1..25 で、Patches の枠の内側の最下段 3 行は y=21..24。
     let terminal = render_screen(&mut screen);
     let text = buffer_to_string(&terminal);
     let lines: Vec<&str> = text.lines().collect();
     assert!(lines[21].contains(" /filter"), "{text}");
     assert!(lines[22].contains("lead"), "{text}");
+    // 1 行目の左上の角は Role / Preset / Patches の 3 つ。
+    let inner_top: Vec<char> = lines[1].chars().collect();
+    let patches_x = corners(&inner_top, '┌')[2] as u16;
     let buffer = terminal.backend().buffer();
-    assert_eq!(buffer.cell((118, 24)).unwrap().symbol(), "└", "{text}");
-    assert_eq!(buffer.cell((119, 21)).unwrap().fg, MONOKAI_YELLOW);
+    assert_eq!(
+        buffer.cell((patches_x, 24)).unwrap().symbol(),
+        "└",
+        "{text}"
+    );
+    assert_eq!(buffer.cell((patches_x + 1, 21)).unwrap().fg, MONOKAI_YELLOW);
 
     press(&mut screen, KeyCode::Char('('));
     let terminal = render_screen(&mut screen);
     let buffer = terminal.backend().buffer();
     assert_eq!(
-        buffer.cell((119, 21)).unwrap().fg,
+        buffer.cell((patches_x + 1, 21)).unwrap().fg,
         ratatui::style::Color::Red
     );
 
@@ -233,4 +251,74 @@ fn the_plugin_menu_overlay_marks_the_soloed_plugin() {
     assert!(line(" f  floe").contains("solo"), "{text}");
     assert!(!line(" d  dexed").contains("solo"), "{text}");
     assert!(text.contains("M:plugin solo/mute"), "{text}");
+}
+
+/// Patches pane は一覧の最長名に合わせた幅。測り直すのは絞り込みの確定と、Patches pane へ
+/// focus が入ったときだけで、入力中や Preset を動かしている間は幅を変えない。
+#[test]
+fn the_patches_pane_fits_the_longest_name_when_the_list_is_settled() {
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    let long_name = "Pads/A Very Long Warm Pad Name.fxp";
+    let load = cmrt_tui_core::patch_load::PatchLoadState::ready(
+        ["Leads/Lead 1.fxp", "Basses/Sub Bass.fxp", long_name]
+            .iter()
+            .map(|name| (name.to_string(), name.to_lowercase()))
+            .collect(),
+    );
+    let ctx = crate::KeyboardContext {
+        patch_dirs_configured: true,
+        patch_load: &load,
+        voicing: &NoVoicing,
+        catalog_notes: &[],
+    };
+    let mut screen = crate::KeyboardScreen::new(
+        None,
+        KeyboardState::new(Some("Leads/Lead 1.fxp".to_string())),
+        crate::KeyboardMmlInput::default(),
+        crate::KeyboardNoteGuide::new(None),
+    );
+    screen.sync_patch_catalog(&ctx);
+    let press = |screen: &mut crate::KeyboardScreen<'_>, code| {
+        screen.handle_key(KeyEvent::new(code, KeyModifiers::NONE), &ctx);
+    };
+    // Patches pane の幅（左右の枠を含む）。1 行目の左上の角は Role / Preset / Patches の 3 つ。
+    let patches_width = |screen: &mut crate::KeyboardScreen<'_>| {
+        let text = buffer_to_string(&render_screen(screen));
+        let inner_top: Vec<char> = text.lines().nth(1).unwrap().chars().collect();
+        let left = corners(&inner_top, '┌')[2];
+        let right = left + inner_top[left..].iter().position(|&c| c == '┐').unwrap();
+        (right + 1 - left, text)
+    };
+    // 枠 2 + `▶ ` 2 + Category 12 + Load 7 + 列の間 2 を名前に足した幅。
+    let fitting = |name: &str| name.len() + 25;
+
+    let (width, text) = patches_width(&mut screen);
+    assert!(text.contains(long_name), "{text}");
+    assert_eq!(width, fitting(long_name), "{text}");
+
+    // 入力中は一覧が絞られても幅はそのまま。Enter で確定したら測り直す。
+    press(&mut screen, KeyCode::Char('/'));
+    press(&mut screen, KeyCode::Char('1'));
+    let (typing, text) = patches_width(&mut screen);
+    assert!(!text.contains(long_name), "{text}");
+    assert_eq!(typing, fitting(long_name), "{text}");
+    press(&mut screen, KeyCode::Enter);
+    let (settled, text) = patches_width(&mut screen);
+    assert_eq!(settled, fitting("Leads/Lead 1.fxp"), "{text}");
+
+    // 条件を外して Preset pane へ。Preset を動かしても幅はそのまま、Patches pane へ入ったら測り直す。
+    press(&mut screen, KeyCode::Char('/'));
+    press(&mut screen, KeyCode::Backspace);
+    press(&mut screen, KeyCode::Enter);
+    press(&mut screen, KeyCode::Char('h'));
+    let (before_preset, text) = patches_width(&mut screen);
+    assert_eq!(before_preset, fitting(long_name), "{text}");
+    press(&mut screen, KeyCode::Char('j')); // Bass › bass|bs
+    let (moving, text) = patches_width(&mut screen);
+    assert!(!text.contains(long_name), "{text}");
+    assert_eq!(moving, fitting(long_name), "{text}");
+    press(&mut screen, KeyCode::Char('l'));
+    let (entered, text) = patches_width(&mut screen);
+    assert_eq!(entered, fitting("Basses/Sub Bass.fxp"), "{text}");
 }

@@ -109,16 +109,54 @@ fn the_effect_pane_sits_at_the_right_end_and_turns_yellow_when_focused() {
     assert_eq!(buffer.cell((patches_x, 1)).unwrap().fg, MONOKAI_FG);
 }
 
+/// Effect pane の枠の内側の文字を、行をまたいで空白を除いてつなげたもの。
+fn effect_pane_text(terminal: &Terminal<TestBackend>) -> String {
+    let effect_x = pane_corners(terminal, 0)[2];
+    let buffer = terminal.backend().buffer();
+    (1..buffer.area.height)
+        .flat_map(|y| (effect_x + 1..buffer.area.width - 1).map(move |x| (x, y)))
+        .map(|position| buffer.cell(position).unwrap().symbol())
+        .filter(|symbol| !symbol.trim().is_empty())
+        .collect()
+}
+
+/// 段の名前が pane の幅より長くても、折り返して末尾まで出す。
+#[test]
+fn a_long_stage_name_wraps_to_its_end() {
+    let load = patch_load();
+    let stages: Vec<_> = catalog()
+        .presets()
+        .iter()
+        .map(|preset| preset.json_element())
+        .collect();
+    let mut screen = screen(EffectPlugins::with_catalog(catalog()), stages, &load);
+
+    // 100 桁では Effect pane は最小の 16 桁で、`▶ 1. ` の後ろに 9 桁しか残らない。
+    let terminal = render(&mut screen, 100);
+    let text = buffer_to_string(&terminal);
+
+    let compact = effect_pane_text(&terminal);
+    for name in catalog().presets().iter().map(|preset| &preset.display) {
+        let name: String = name.chars().filter(|c| !c.is_whitespace()).collect();
+        assert!(
+            compact.contains(&name),
+            "{name}
+{text}"
+        );
+    }
+}
+
 #[test]
 fn an_empty_pane_without_a_catalog_wraps_the_notice() {
     let load = patch_load();
     let mut screen = screen(EffectPlugins::none(), Vec::new(), &load);
 
-    let text = buffer_to_string(&render(&mut screen, 160));
+    let terminal = render(&mut screen, 160);
+    let text = buffer_to_string(&terminal);
 
     assert!(text.contains(" Effect (0) "), "{text}");
     // 狭い pane では折り返す。先頭と末尾の語がどちらも見えていれば切れていない。
-    let compact: String = text.chars().filter(|c| !c.is_whitespace()).collect();
+    let compact = effect_pane_text(&terminal);
     assert!(compact.contains("effect"), "{text}");
     assert!(compact.contains("使えない"), "{text}");
     assert!(

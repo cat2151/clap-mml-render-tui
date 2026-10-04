@@ -69,3 +69,43 @@ fn a_patch_filter_round_trips_through_json() {
     let restored: KeyboardSessionState = serde_json::from_str(&json).unwrap();
     assert_eq!(restored.patch_filter, state.patch_filter);
 }
+
+#[test]
+fn old_json_without_controllers_reads_as_untouched_controllers() {
+    let state: KeyboardSessionState =
+        serde_json::from_str(r#"{"patch":"a.fxp","buffer_multiplier":2}"#).unwrap();
+
+    assert_eq!(state.controllers, KeyboardControllerState::default());
+    assert_eq!(state.controllers.cc_number, 1);
+}
+
+#[test]
+fn controllers_round_trip_through_json() {
+    let state = KeyboardSessionState {
+        controllers: KeyboardControllerState {
+            velocity: VelocityMode::Periodic,
+            modulation: ModulationMode::On,
+            pitch_bend: PitchBendMode::CenterAfterMin,
+            cc_number: 74,
+            cc_periodic: true,
+        },
+        ..KeyboardSessionState::default()
+    };
+
+    let json = serde_json::to_string(&state).unwrap();
+    assert!(
+        json.contains(r#""pitch_bend":"center_after_min""#),
+        "{json}"
+    );
+    let restored: KeyboardSessionState = serde_json::from_str(&json).unwrap();
+    assert_eq!(restored, state);
+}
+
+#[test]
+fn an_out_of_range_cc_number_is_normalized_to_cc1() {
+    let mut state: KeyboardSessionState =
+        serde_json::from_str(r#"{"controllers":{"cc_number":200}}"#).unwrap();
+    state.normalize();
+
+    assert_eq!(state.controllers.cc_number, 1);
+}
