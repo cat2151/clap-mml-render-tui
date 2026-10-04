@@ -235,3 +235,41 @@ fn a_slide_column_alone_keeps_its_width_from_the_previous_column() {
         .iter()
         .all(|e| e.message[0] & 0xF0 != 0xB0));
 }
+
+#[test]
+fn vibrato_preview_uses_shared_settings_from_zero_and_keeps_speed_resets() {
+    let mut rules = RuleTable::default();
+    rules.toggle(1, Rule::Vibrato);
+    rules.set_vibrato_settings(crate::VibratoSettings {
+        delay_ms: 200,
+        rise_ms: 300,
+        depth: 80,
+    });
+    rules.step_param(21, 8);
+    let mml = "r8 o3 l1 e g";
+    let out = column_of(mml, &rules, 1, Take::Converted);
+    let cc20: Vec<_> = out
+        .iter()
+        .filter(|e| e.message[0] & 0xF0 == 0xB0 && e.message[1] == 20)
+        .map(|e| (e.seconds, e.message[2]))
+        .collect();
+    assert_eq!(cc20.first(), Some(&(0.0, 0)));
+    assert!(cc20.iter().filter(|(t, _)| *t <= 0.2).all(|(_, v)| *v == 0));
+    assert!(cc20
+        .iter()
+        .any(|(t, v)| *t > 0.2 && *t < 0.5 && *v > 0 && *v < 80));
+    assert!(cc20.contains(&(0.5, 80)));
+    assert_eq!(cc20.iter().rfind(|(t, _)| *t < 2.0).unwrap().1, 80);
+    assert_eq!(cc20.last(), Some(&(2.0, 0)));
+    assert!(out.contains(&TimedMidiEvent {
+        seconds: 0.0,
+        message: [0xB0, 21, 103]
+    }));
+    assert!(out.contains(&TimedMidiEvent {
+        seconds: 2.0,
+        message: [0xB0, 21, 95]
+    }));
+
+    let plain = column_of(mml, &rules, 1, Take::Plain);
+    assert!(plain.iter().all(|e| e.message[0] & 0xF0 != 0xB0));
+}

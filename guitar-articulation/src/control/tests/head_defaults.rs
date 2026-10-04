@@ -1,4 +1,4 @@
-//! 演奏の頭の列 CC（[`add_column_cc_defaults`]）: 頭の時刻に、[`COLUMN_CCS`] の CC がちょうど 1 つずつ在る。
+//! 演奏の頭の列 CC（[`add_column_cc_defaults`]）: CC20 と [`COLUMN_CCS`] がちょうど 1 つずつ在る。
 
 use super::*;
 use crate::release::RELEASE_SHAPE_RANGE;
@@ -86,6 +86,8 @@ fn every_column_cc_appears_exactly_once_at_the_head_with_the_right_value() {
                         if !humanize {
                             assert_eq!(first_note_on(&out), 0.25, "{label}");
                         }
+                        // 既定の vibrato は発音時点では待機中。OFF の演奏も同じ 0 で残存深さを消す。
+                        assert_eq!(head_values(&out, VIBRATO_DEPTH_CC), vec![0], "{label}");
                         for cc in &COLUMN_CCS {
                             let (controller, default) = (cc.controller, cc.default);
                             let head = head_values(&out, controller);
@@ -120,6 +122,13 @@ fn every_column_cc_appears_exactly_once_at_the_head_with_the_right_value() {
 fn single_note_columns_also_get_exactly_one_head_cc_each() {
     let raw = raw("o3 l8 e g a");
     let notes = notes_from_events(&raw);
+    for on in [false, true] {
+        let columns: &[(usize, Rule)] = if on { &[(1, Rule::Vibrato)] } else { &[] };
+        let table = rules_on(columns, &[]);
+        let articulated = articulate(&notes, &table);
+        let out = crate::column_events(&notes, &articulated, &table, 1, crate::Take::Converted);
+        assert_eq!(head_values(&out, VIBRATO_DEPTH_CC), vec![0]);
+    }
     for cc in &COLUMN_CCS {
         let controller = cc.controller;
         for &(rule, value) in cc.rules {
@@ -152,11 +161,8 @@ fn the_head_is_the_earliest_note_on_even_when_a_later_column_sounds_first() {
     let notes = [note(0, 0.30), note(1, 0.20)];
     let mut out = vec![control_change(0.30, 0, VIBRATO_DEPTH_CC, VIBRATO_DEPTH)];
     add_column_cc_defaults(&mut out, &notes);
-    for &ColumnCc {
-        controller,
-        default,
-        ..
-    } in &COLUMN_CCS
+    for (controller, default) in std::iter::once((VIBRATO_DEPTH_CC, 0))
+        .chain(COLUMN_CCS.iter().map(|cc| (cc.controller, cc.default)))
     {
         assert_eq!(
             values_of(&out, controller)
@@ -168,7 +174,7 @@ fn the_head_is_the_earliest_note_on_even_when_a_later_column_sounds_first() {
         );
     }
     // 頭でない時刻の CC は、頭に既定値を足すかどうかに関わらない。
-    assert_eq!(out.len(), COLUMN_CCS.len() + 1);
+    assert_eq!(out.len(), COLUMN_CCS.len() + 2);
     let mut empty = Vec::new();
     add_column_cc_defaults(&mut empty, &[]);
     assert!(empty.is_empty());

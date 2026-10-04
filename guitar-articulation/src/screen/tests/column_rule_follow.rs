@@ -1,6 +1,8 @@
 use super::{key, screen_with_mml};
 use crate::history::GuitarArticulationHistoryEntry;
-use crate::{convert, ColumnRuleAnchor, GuitarArticulationScreen, Rule, RuleTable, Take};
+use crate::{
+    convert, ColumnRuleAnchor, GuitarArticulationScreen, Rule, RuleTable, Take, VibratoSettings,
+};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 /// `i` → 今の MML を消す → 文字 → `Enter` で MML を確定し直す。
@@ -124,4 +126,29 @@ fn esc_on_the_history_overlay_restores_the_anchor_too() {
     screen.handle_key_event(key(KeyCode::Esc));
 
     assert_eq!(screen.anchor, before);
+}
+
+#[test]
+fn phrase_vibrato_settings_survive_mml_recommit_with_or_without_an_anchor() {
+    let settings = VibratoSettings {
+        delay_ms: 850,
+        rise_ms: 1250,
+        depth: 104,
+    };
+    for with_anchor in [false, true] {
+        let mut screen = screen_with_mml("c e g");
+        if with_anchor {
+            screen.handle_key_event(key(KeyCode::Char('v')));
+        }
+        screen.rules.set_vibrato_settings(settings);
+        screen.rules.step_param(21, -8);
+
+        for mml in ["d c c g", "", "c e g"] {
+            recommit(&mut screen, mml);
+            assert_eq!(screen.rules().vibrato_settings(), settings);
+            assert_eq!(screen.rules().param(21), 87);
+            assert_eq!(screen.history().entries[0].rules, *screen.rules());
+            assert_converted_matches_rules(&screen);
+        }
+    }
 }

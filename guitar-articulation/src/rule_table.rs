@@ -4,12 +4,13 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
-use crate::{params, AccentPattern, AutoPick, RowRule, Rule};
+use crate::{params, AccentPattern, AutoPick, RowRule, Rule, VibratoSettings};
 
 /// 列番号 → その列で ON のルールと、行全体で ON のルールと、行全体のパラメータ（[`PARAMS`]）。
 ///
 /// JSON では `{"columns":{"3":["hammer_pull"]},"rows":["economy_picking"],"params":{"22":0}}`。
-/// `params` は既定と違う値だけで、無ければ省く。`accent`（[`AccentPattern`]）・`auto_pick`（[`AutoPick`]）も既定なら省く。
+/// `params` は既定と違う値だけで、無ければ省く。`accent`（[`AccentPattern`]）・`auto_pick`（[`AutoPick`]）・
+/// `vibrato`（[`VibratoSettings`]）も既定なら省く。ビブラート速度は `params` の CC21 のみ。
 /// 排他な行ルール（[`RowRule::excluded`]）が両方 ON の JSON は、エコノミーピッキングだけ残して読む。
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(from = "RuleTableFields")]
@@ -23,6 +24,8 @@ pub struct RuleTable {
     pub(crate) accent: AccentPattern,
     #[serde(skip_serializing_if = "AutoPick::is_default")]
     pub(crate) auto_pick: AutoPick,
+    #[serde(skip_serializing_if = "VibratoSettings::is_default")]
+    pub(crate) vibrato: VibratoSettings,
 }
 
 #[derive(Deserialize)]
@@ -38,6 +41,8 @@ struct RuleTableFields {
     accent: AccentPattern,
     #[serde(default)]
     auto_pick: AutoPick,
+    #[serde(default)]
+    vibrato: VibratoSettings,
 }
 
 impl From<RuleTableFields> for RuleTable {
@@ -57,6 +62,7 @@ impl From<RuleTableFields> for RuleTable {
             params: params::sanitized(fields.params),
             accent: fields.accent,
             auto_pick,
+            vibrato: fields.vibrato.bounded(),
         }
     }
 }

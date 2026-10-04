@@ -215,3 +215,47 @@ fn raw_events_other_than_notes_survive() {
     let out = convert(&events, &with_humanize(&RuleTable::default()));
     assert!(out.contains(&volume));
 }
+
+#[test]
+fn vibrato_follows_the_humanized_chords_earliest_attack_and_last_release() {
+    let mut rules = with_humanize(&RuleTable::default());
+    rules.toggle(0, Rule::Vibrato);
+    rules.set_vibrato_settings(crate::VibratoSettings {
+        delay_ms: 200,
+        rise_ms: 300,
+        depth: 80,
+    });
+    let mml = "r8 o3 l1 'eg' a";
+    let notes = notes(mml);
+    let articulated = articulate(&notes, &rules);
+    let humanized = seeded(&notes, &articulated);
+    let chord: Vec<_> = notes
+        .iter()
+        .zip(&humanized)
+        .filter(|(n, _)| n.column == 0)
+        .collect();
+    let on = chord
+        .iter()
+        .map(|(_, h)| h.on_seconds)
+        .fold(f64::INFINITY, f64::min);
+    let off = chord.iter().map(|(_, h)| h.off_seconds).fold(0.0, f64::max);
+    assert!(chord.iter().any(|(n, h)| n.on_seconds != h.on_seconds));
+    let out = convert(&raw(mml), &rules);
+    let cc20: Vec<_> = out
+        .iter()
+        .filter(|e| is_cc(e, 20))
+        .map(|e| (e.seconds, e.message[2]))
+        .collect();
+    assert_eq!(cc20.first(), Some(&(on, 0)));
+    assert_eq!(cc20.iter().filter(|(t, _)| *t == on).count(), 1);
+    assert!(cc20
+        .iter()
+        .filter(|(t, _)| *t <= on + 0.2)
+        .all(|(_, v)| *v == 0));
+    assert!(cc20
+        .iter()
+        .any(|(t, v)| *t > on + 0.2 && *t < on + 0.5 && *v > 0 && *v < 80));
+    assert!(cc20.contains(&(on + 0.5, 80)));
+    assert!(cc20.contains(&(off, 0)));
+    assert!(cc20.iter().all(|(t, v)| *t < off || *v == 0));
+}

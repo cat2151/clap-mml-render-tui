@@ -13,7 +13,7 @@ use crate::{notes_from_events, performance_events, Note, RuleTable};
 pub struct ColumnRuleAnchor {
     #[serde(default)]
     pub mml: String,
-    /// 列ごとのルールだけ。行全体のルールとパラメータは持たない。
+    /// 列ごとのルールだけ。フレーズ共通の設定は持たない。
     #[serde(default)]
     pub rules: RuleTable,
 }
@@ -30,21 +30,20 @@ impl ColumnRuleAnchor {
         }
     }
 
-    /// `notes` の列へ列ルールを付け替え、行全体のルール・パラメータ・アクセントと自動ハンマリングの選び方は `current` のものにした表。
+    /// `notes` の列へ列ルールを付け替え、フレーズ共通の設定はすべて `current` のものにした表。
     /// この MML を解釈できなければ、列ルールは空。
     pub(crate) fn rules_for(&self, notes: &[Note], current: &RuleTable) -> RuleTable {
-        let mut rules = match performance_events(&self.mml, None) {
+        let column_rules = match performance_events(&self.mml, None) {
             Ok(events) => {
                 let map = column_map(&notes_from_events(&events), notes);
                 self.rules.remap_columns(&map)
             }
             Err(_) => RuleTable::default(),
         };
-        rules.rows = current.rows.clone();
-        rules.params = current.params.clone();
-        rules.accent = current.accent;
-        rules.auto_pick = current.auto_pick;
-        rules
+        RuleTable {
+            on: column_rules.on,
+            ..current.clone()
+        }
     }
 }
 

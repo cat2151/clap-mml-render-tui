@@ -1,7 +1,7 @@
 use serde_json::json;
 
 use super::*;
-use crate::{ColumnRuleAnchor, RowRule, Rule};
+use crate::{ColumnRuleAnchor, RowRule, Rule, VibratoSettings};
 
 fn with_temp_history<T>(name: &str, body: impl FnOnce() -> T) -> T {
     let tmp = cmrt_history::test_support::unique_test_dir(&format!("guitar_articulation_{name}"));
@@ -28,6 +28,12 @@ fn save_then_load_returns_same_entries() {
         let mut rules = RuleTable::default();
         rules.toggle(2, Rule::HammerPull);
         rules.toggle_row(RowRule::EconomyPicking);
+        rules.set_vibrato_settings(VibratoSettings {
+            delay_ms: 700,
+            rise_ms: 1200,
+            depth: 96,
+        });
+        rules.step_param(21, -8);
         let anchor = ColumnRuleAnchor::new("e", &rules);
         let mut history = GuitarArticulationHistory::default();
         history.push_front(entry("cde"));
@@ -70,6 +76,17 @@ fn load_fills_missing_fields_with_defaults() {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, r#"{"entries":[{"mml":"cde"}]}"#).unwrap();
         assert_eq!(load_history().entries, vec![entry("cde")]);
+        // 旧履歴の vibrato ON と速度は保ち、時間・深さだけ新しい既定値で補完する。
+        std::fs::write(
+            &path,
+            r#"{"entries":[{"mml":"cde","rules":{"columns":{"0":["vibrato"]},"params":{"21":103}}}]}"#,
+        )
+        .unwrap();
+        let loaded = load_history();
+        let rules = &loaded.entries[0].rules;
+        assert!(rules.is_on(0, Rule::Vibrato));
+        assert_eq!(rules.vibrato_settings(), VibratoSettings::default());
+        assert_eq!(rules.param(21), 103);
     });
 }
 

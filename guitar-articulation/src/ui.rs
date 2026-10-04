@@ -31,6 +31,7 @@ mod rule_list;
 mod rule_rows;
 mod sample_midi;
 mod smf_material;
+mod vibrato;
 
 pub(crate) use event_list::{name_width, EventRow};
 pub(crate) use rule_rows::{
@@ -144,6 +145,7 @@ pub fn draw(screen: &GuitarArticulationScreen, f: &mut Frame<'_>) {
     smf_material::draw_input_overlay(f, screen);
     rule_list::draw_overlay(f, screen);
     param_list::draw_overlay(f, screen);
+    vibrato::draw_overlay(f, screen);
     arp::draw_overlay(f, screen);
     if screen.help_open() {
         help::draw_overlay(f);

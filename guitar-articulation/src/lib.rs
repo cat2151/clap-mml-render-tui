@@ -32,6 +32,7 @@ mod single_note;
 mod strings;
 pub mod ui;
 mod unison_bend;
+mod vibrato_settings;
 mod voicing;
 
 #[cfg(test)]
@@ -84,6 +85,7 @@ pub use strings::{picks_string, strings_by_column, REACH_SEMITONES};
 pub use unison_bend::{
     UNISON_BEND_FALL_SECONDS, UNISON_BEND_RISE_SECONDS, UNISON_BEND_STEP_SECONDS,
 };
+pub use vibrato_settings::{VibratoSettings, VIBRATO_TIME_MAX_MS};
 pub use voicing::{
     apply_voicing_rules, slide_in_pitches, slide_in_width, BRUSH_PITCHES, FRET_MUTE_PITCHES,
     GLIDE_IN_PITCHES, MUTE_PITCHES, NATURAL_HARMONICS_PITCHES, PINCH_HARMONIC_PITCHES,

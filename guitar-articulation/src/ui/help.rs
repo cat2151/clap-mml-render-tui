@@ -16,7 +16,7 @@ use cmrt_tui_core::{
 /// 「ヘルプ(Keybinds)」の並びは他画面と揃えたまま変えない。
 const TITLE: &str = " Guitar Articulation ヘルプ(Keybinds)  Esc/?:close ";
 
-pub(crate) const KEY_ROWS: [&str; 37] = [
+pub(crate) const KEY_ROWS: [&str; 38] = [
     " ── MML 欄 ──",
     " 文字    MML を編集",
     " Enter   確定して演奏",
@@ -29,6 +29,7 @@ pub(crate) const KEY_ROWS: [&str; 37] = [
     " /       スライド",
     " c       チョーキング",
     " v       ビブラート",
+    " Shift+V ビブラート設定(フレーズ共通)",
     " g       ピックスクレイプ",
     " t       奏法リスト(他の奏法も)",
     " ── 行のルール ──",
@@ -56,7 +57,7 @@ pub(crate) const KEY_ROWS: [&str; 37] = [
     " Ctrl+G  画面切替メニュー",
 ];
 
-pub(crate) const DETAIL_ROWS: [&str; 68] = [
+pub(crate) const DETAIL_ROWS: [&str; 71] = [
     " MML の音へ列ごとに奏法(KS)を足し、raw と聴き比べる。",
     " 反転した列がカーソル。ルールの切替で Articulated を演奏。",
     " ルールの段の文字は t の overlay の文字。灰色の - は効かない列(理由は枠の見出しに)",
@@ -67,6 +68,9 @@ pub(crate) const DETAIL_ROWS: [&str; 68] = [
     " /  前の列から上行→Slide_Up、下行→Slide_Down。8 半音以上は 7 半音で滑る",
     " c  前の列から上行 1/2/3 半音→Bending_HT/WH/1HT",
     " v  CC20。a m p / c g は同じ列で 1 つだけ、v は重ねられる",
+    " Shift+V 待機(ms) → 直線で立ち上がり(ms) → 最終深さを維持。終了で0",
+    "    j/k・↑↓:項目 h/l・←→:変更 Esc:値を保持して閉じる。フレーズ共通",
+    "    速度は u の CC21 と共通。v の ON/OFF は変えず、変更のたびに試聴",
     " g  Pick_Scratch。音高は F#1〜F#2 へ畳み、和音は最低音だけ",
     " t  列ルールを matrix と同じ 5 段で並べる。j/k:段 h/l:動いた先を ON",
     "    (なし=段を OFF) 文字:ON/OFF space:試聴 /:絞り込み Enter/Esc:閉じる",

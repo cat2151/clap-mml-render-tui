@@ -2,7 +2,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::*;
 use crate::test_effects::{amp_plugins, amp_stage};
-use crate::{convert, ColumnRuleAnchor, RowRule, Rule, RuleTable, Take};
+use crate::{convert, ColumnRuleAnchor, RowRule, Rule, RuleTable, Take, VibratoSettings};
 
 fn key(code: KeyCode) -> KeyEvent {
     KeyEvent::new(code, KeyModifiers::NONE)
@@ -99,6 +99,12 @@ fn applying_an_entry_rebuilds_the_takes_and_keeps_the_column_rules() {
     let mut rules = RuleTable::default();
     rules.toggle(1, Rule::HammerPull);
     rules.toggle_row(RowRule::EconomyPicking);
+    rules.set_vibrato_settings(VibratoSettings {
+        delay_ms: 750,
+        rise_ms: 1000,
+        depth: 80,
+    });
+    rules.step_param(21, 8);
     let target = GuitarArticulationHistoryEntry {
         mml: "o3 l8 e g a".to_string(),
         rules: rules.clone(),
@@ -281,6 +287,12 @@ fn screen_keys_do_nothing_while_the_overlay_is_open() {
 fn with_history_restores_the_newest_entry_and_entering_does_not_overwrite_it() {
     let mut rules = RuleTable::default();
     rules.toggle(1, Rule::HammerPull);
+    rules.set_vibrato_settings(VibratoSettings {
+        delay_ms: 600,
+        rise_ms: 900,
+        depth: 72,
+    });
+    rules.step_param(21, -8);
     let history = GuitarArticulationHistory {
         entries: vec![
             entry("o3 l8 e g a", rules.clone()),

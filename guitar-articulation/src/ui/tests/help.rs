@@ -22,13 +22,17 @@ fn question_mark_draws_the_help_over_the_screen() {
     assert!(!keys.contains("Hammer-On"), "{keys}");
     assert!(details.contains("Hammer-On"), "{details}");
     assert!(details.contains("Mute_Down/Up"), "{details}");
+    assert!(keys.contains("Shift+Vビブラート設定"), "{keys}");
+    for stage in ["待機(ms)", "直線で立ち上がり(ms)", "最終深さを維持"] {
+        assert!(details.contains(stage), "{stage}\n{details}");
+    }
 }
 
 #[test]
 fn help_shows_every_row_of_both_panes_on_a_tall_terminal() {
     let mut screen = screen_with_mml("o3 l8 e f+ g");
     screen.handle_key_event(key(KeyCode::Char('?')));
-    let mut terminal = Terminal::new(TestBackend::new(160, 70)).unwrap();
+    let mut terminal = Terminal::new(TestBackend::new(160, 80)).unwrap();
     terminal.draw(|f| draw(&screen, f)).unwrap();
     let buffer = terminal.backend().buffer().clone();
 

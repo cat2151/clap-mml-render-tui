@@ -1,6 +1,8 @@
 use std::collections::BTreeSet;
 use std::ops::RangeInclusive;
 
+mod vibrato;
+
 use crate::release::{RELEASE_SHAPE_CC, RELEASE_SHAPE_DEFAULT};
 use crate::{
     slide_in_width, slide_semitones, Articulation, Note, RowRule, Rule, RuleTable, TimedMidiEvent,
@@ -22,7 +24,7 @@ pub const SLIDE_IN_WIDTH_CC_DEFAULT: u8 = 82;
 /// ビブラートの深さを決める CC（sfz の `pitchlfo_depthcc20=100`、127 で 100 cent）。
 pub const VIBRATO_DEPTH_CC: u8 = 20;
 
-/// [`Rule::Vibrato`] の列で送る CC20 の値。
+/// [`Rule::Vibrato`] の最終深さの既定値。
 pub const VIBRATO_DEPTH: u8 = 64;
 
 /// sfz の `set_cc20`。ビブラートの音の終わりと演奏の終わりにこの値へ戻す。
@@ -67,12 +69,7 @@ pub(crate) struct ColumnCc {
     pub rules: &'static [(Rule, u8)],
 }
 
-pub(crate) const COLUMN_CCS: [ColumnCc; 4] = [
-    ColumnCc {
-        controller: VIBRATO_DEPTH_CC,
-        default: VIBRATO_DEPTH_CC_DEFAULT,
-        rules: &[(Rule::Vibrato, VIBRATO_DEPTH)],
-    },
+pub(crate) const COLUMN_CCS: [ColumnCc; 3] = [
     ColumnCc {
         controller: LONG_EXTRA_CC,
         default: SWITCH_OFF,
@@ -93,7 +90,7 @@ pub(crate) const COLUMN_CCS: [ColumnCc; 4] = [
     },
 ];
 
-/// CC を送るルール（[`COLUMN_CCS`]）が、奏法 `articulation` で音高 `pitch` の音に効くか。
+/// CC を送るルールが、奏法 `articulation` で音高 `pitch` の音に効くか。
 /// CC を送らないルールは `false`。ビブラートはどの音にも効く。
 pub(crate) fn control_rule_affects(rule: Rule, articulation: Articulation, pitch: u8) -> bool {
     use Articulation as A;
@@ -157,10 +154,11 @@ pub(crate) fn release_shape_columns(
 ///
 /// - `Slide_Up` / `Slide_Down` の音: note on と同時刻に、前の列からの幅の CC26。
 /// - `Slide_In` の音: note on と同時刻に、[`slide_in_width`] の幅の CC27。
-/// - [`Rule::Vibrato`] の列: 列のいちばん早い note on と同時刻に CC20 = [`VIBRATO_DEPTH`]、列の最後の note off と同時刻に 0。
-///   CC は channel 全体に効くので、和音の列でも列で 1 回だけ送る。
+/// - [`Rule::Vibrato`] の列: 実際の最早 note on から、共通設定の待機・立ち上がり・最終深さの CC20。
+///   列の最後の note off で 0 に戻し、同じ channel の次列が先に始まれば次列へ引き渡す。
+///   CC は channel 全体に効くので、和音の列でも深さ変化は列で 1 本だけ作る。
 /// - [`Rule::LongExtra`] / [`Rule::PowerChord`] / [`Rule::PositionRelease`] / [`Rule::AutoSlideOut`] の列:
-///   ビブラートと同じ置き方で CC23 = 127 / CC32 = 127 / CC24 = [`POSITION_RELEASE_VALUE`] /
+///   列の最早 note on と最後の note off に CC23 = 127 / CC32 = 127 / CC24 = [`POSITION_RELEASE_VALUE`] /
 ///   CC24 = [`AUTO_SLIDE_OUT_VALUE`]。列に効く音
 ///   （[`control_rule_affects`]）が無ければ送らない。
 ///   汚し（リリース）が ON なら、CC24 は列ごとに汚し（リリース）が送り直すので、列の終わりでは戻さない。
@@ -212,6 +210,7 @@ pub(crate) fn control_events_with_widths(
         SLIDE_IN_WIDTH_CC,
         SLIDE_IN_WIDTH_CC_DEFAULT,
     );
+    out.extend(vibrato::events(notes, rules, end));
     for cc in &COLUMN_CCS {
         let reset_each_column =
             !(cc.controller == RELEASE_SHAPE_CC && rules.is_row_on(RowRule::HumanizeRelease));
@@ -227,7 +226,7 @@ pub(crate) fn control_events_with_widths(
     out
 }
 
-/// 演奏のいちばん早い note on の時刻に [`COLUMN_CCS`] の CC がまだ無ければ、その時刻に sfz の既定値を足す。
+/// 演奏のいちばん早い note on の時刻に CC20 と [`COLUMN_CCS`] の CC がまだ無ければ、sfz の既定値を足す。
 ///
 /// 演奏が最後の note off より前に次の演奏で上書きされると、終わりの戻しが届かずに前の演奏の値が残る。
 /// 頭で既定値を送れば、ルールが OFF の演奏も前の演奏の値に左右されない。
@@ -241,17 +240,20 @@ pub(crate) fn add_column_cc_defaults(out: &mut Vec<TimedMidiEvent>, notes: &[Not
     else {
         return;
     };
-    let defaults: Vec<TimedMidiEvent> = COLUMN_CCS
-        .iter()
-        .filter(|cc| {
-            !out.iter().any(|e| {
-                e.seconds == first.on_seconds
-                    && e.message[0] & 0xF0 == 0xB0
-                    && e.message[1] == cc.controller
+    let defaults: Vec<TimedMidiEvent> =
+        std::iter::once((VIBRATO_DEPTH_CC, VIBRATO_DEPTH_CC_DEFAULT))
+            .chain(COLUMN_CCS.iter().map(|cc| (cc.controller, cc.default)))
+            .filter(|&(controller, _)| {
+                !out.iter().any(|e| {
+                    e.seconds == first.on_seconds
+                        && e.message[0] & 0xF0 == 0xB0
+                        && e.message[1] == controller
+                })
             })
-        })
-        .map(|cc| control_change(first.on_seconds, first.channel, cc.controller, cc.default))
-        .collect();
+            .map(|(controller, default)| {
+                control_change(first.on_seconds, first.channel, controller, default)
+            })
+            .collect();
     out.splice(0..0, defaults);
 }
 
