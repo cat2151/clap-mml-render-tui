@@ -11,6 +11,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 mod catalog;
 mod effect_pane;
 pub mod guide;
+mod help;
 mod logging;
 mod mml_input;
 mod navigation;
@@ -96,6 +97,7 @@ impl KeyboardScreen<'_> {
         self.patch_filter.close();
         self.plugin_menu = None;
         self.effect.close_overlay();
+        self.help_open = false;
         self.share_notice = None;
         self.note_guide.reset_for_screen();
         self.periodic_timeline.restart();
@@ -109,6 +111,7 @@ impl KeyboardScreen<'_> {
         self.patch_filter.close();
         self.plugin_menu = None;
         self.effect.close_overlay();
+        self.help_open = false;
         self.share_notice = None;
         self.note_guide.reset_for_screen();
         self.periodic_timeline.restart();
@@ -122,7 +125,7 @@ impl KeyboardScreen<'_> {
 
     /// 入力欄か overlay を開いていて、Ctrl+G の画面切替を開かない状態か。
     pub fn blocks_screen_switch(&self) -> bool {
-        self.is_typing() || self.plugin_menu.is_some() || self.effect.is_adding()
+        self.help_open || self.is_typing() || self.plugin_menu.is_some() || self.effect.is_adding()
     }
 
     pub fn prepare_connection(&self, ctx: &KeyboardContext<'_>) {
@@ -214,6 +217,9 @@ impl KeyboardScreen<'_> {
                 _ => {}
             }
             return KeyboardAction::Continue;
+        }
+        if let Some(action) = self.handle_help_key(key) {
+            return action;
         }
         if let Some(action) = self.handle_effect_pane_key(key) {
             return action;

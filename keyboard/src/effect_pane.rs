@@ -71,6 +71,10 @@ impl KeyboardEffectPane {
         self.editor.move_cursor(delta);
     }
 
+    pub(crate) fn clear_pending_delete(&mut self) {
+        self.editor.pending_delete = false;
+    }
+
     /// overlay を閉じ、試聴中の候補を捨てる。掛け直すべき chain（確定済みの chain）を返す。
     pub(crate) fn close_overlay(&mut self) -> Vec<Value> {
         self.adding = false;

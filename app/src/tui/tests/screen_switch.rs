@@ -248,3 +248,27 @@ fn the_keyboard_effect_add_overlay_blocks_the_screen_switch_menu() {
         .handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
     app.finish_keyboard();
 }
+
+#[test]
+fn the_keyboard_help_blocks_shared_overlays_until_closed() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.start_keyboard(None);
+    app.handle_keyboard_key_event(KeyEvent::new(KeyCode::Char('?'), KeyModifiers::NONE));
+    assert!(app.keyboard.help_open());
+    assert!(!app.can_open_screen_switch_menu());
+    assert!(!app.try_open_screen_switch_menu(ctrl_g()));
+    assert!(!app.screen_switch_menu.is_open());
+    let ctrl_p = KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL);
+    assert!(!app.try_open_mml_overlay(ctrl_p));
+    assert!(!app.mml_overlay.is_open());
+    assert!(!app.keyboard.periodic_sending_stopped());
+
+    app.handle_keyboard_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    assert!(app.try_open_screen_switch_menu(ctrl_g()));
+    app.screen_switch_menu
+        .handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    assert!(app.try_open_mml_overlay(ctrl_p));
+    assert!(app.mml_overlay.is_open());
+    app.handle_mml_overlay_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    app.finish_keyboard();
+}

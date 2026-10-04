@@ -22,6 +22,7 @@ mod connection_overlay;
 mod controller;
 mod effect;
 mod guide;
+mod help;
 mod mml_overlay;
 mod note;
 mod note_columns;
@@ -137,6 +138,9 @@ pub fn draw(
     }
     draw_effect_add_overlay(screen, f, chunks[0]);
     draw_note_guide_overlay(screen.note_guide.presentation(), f, f.area());
+    if screen.help_open() {
+        help::draw_overlay(f);
+    }
 }
 
 /// 周期で変わる値は最大の桁で測るので、和音や操作のモードを変えない限り演奏中も同じ幅になる。

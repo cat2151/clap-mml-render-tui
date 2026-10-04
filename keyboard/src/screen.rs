@@ -17,6 +17,8 @@ pub struct KeyboardScreen<'a> {
     pub(crate) plugin_menu: Option<PluginMenu>,
     effect_plugins: EffectPlugins,
     pub(crate) effect: KeyboardEffectPane,
+    /// Keyboard の keybinds を確認する一時表示。セッションへは保存しない。
+    pub(crate) help_open: bool,
     /// `y` でコピーした共有コマンド。`Some` の間は中央に通知を出す。
     pub(crate) share_notice: Option<String>,
     /// 周期送信を予約している live timeline。
@@ -39,6 +41,7 @@ impl<'a> KeyboardScreen<'a> {
             plugin_menu: None,
             effect_plugins: EffectPlugins::none(),
             effect: KeyboardEffectPane::default(),
+            help_open: false,
             share_notice: None,
             periodic_timeline: PeriodicTimeline::default(),
         }

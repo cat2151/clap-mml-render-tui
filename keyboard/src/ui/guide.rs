@@ -47,7 +47,7 @@ pub(super) fn keyboard_help_lines(
         ],
         None if effect_focused => vec![
             Line::from(concat!(
-                "h/l/Left/Right:pane  k/j/Up/Down:-/+1  PgUp/PgDn:-/+10  Home/End:first/last  ",
+                "?:help  h/l/Left/Right:pane  k/j/Up/Down:-/+1  PgUp/PgDn:-/+10  Home/End:first/last  ",
                 "a:add  r:replace  dd:del  b:bypass  Alt+Up/Down:move  /:filter  M:plugin solo/mute"
             )),
             Line::from(
@@ -59,7 +59,7 @@ pub(super) fn keyboard_help_lines(
         ],
         None => vec![
             Line::from(concat!(
-                "h/l/Left/Right:pane  r:random  k/j/Up/Down:-/+1  Ctrl+u/d/PgUp/PgDn:-/+10  ",
+                "?:help  h/l/Left/Right:pane  r:random  k/j/Up/Down:-/+1  Ctrl+u/d/PgUp/PgDn:-/+10  ",
                 "Home/End:first/last  /:filter  M:plugin solo/mute"
             )),
             Line::from(

@@ -18,7 +18,7 @@ impl KeyboardVoicingLookup for NoVoicing {
     }
 }
 
-fn patch_load() -> PatchLoadState {
+pub(crate) fn patch_load() -> PatchLoadState {
     PatchLoadState::ready(
         ["Leads/Lead 1.fxp", "Pads/Warm.fxp"]
             .iter()
@@ -27,7 +27,7 @@ fn patch_load() -> PatchLoadState {
     )
 }
 
-fn context(patch_load: &PatchLoadState) -> KeyboardContext<'_> {
+pub(crate) fn context(patch_load: &PatchLoadState) -> KeyboardContext<'_> {
     KeyboardContext {
         patch_dirs_configured: true,
         patch_load,
@@ -73,7 +73,7 @@ fn stage(index: usize) -> Value {
     catalog().presets()[index].json_element()
 }
 
-fn screen_with(
+pub(crate) fn screen_with(
     effect_plugins: EffectPlugins,
     chain: Vec<Value>,
     ctx: &KeyboardContext<'_>,
