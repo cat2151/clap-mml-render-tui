@@ -104,6 +104,7 @@ pub(super) fn draw_help(f: &mut Frame, mode: Mode) {
             section_title("NORMAL モード"),
             Line::from("  j / ↓       : 下へ移動して再生"),
             Line::from("  k / ↑       : 上へ移動して再生"),
+            Line::from("  Alt+↑/↓     : 現在行を上 / 下へ並べ替え"),
             Line::from("  PageDown    : 1画面下へ移動して再生"),
             Line::from("  PageUp      : 1画面上へ移動して再生"),
             Line::from("  Home        : 先頭行へ移動して再生"),

@@ -3,6 +3,9 @@
 mod effect_chain;
 mod patch_select;
 
+#[cfg(test)]
+mod tests;
+
 pub(crate) use patch_select::HeavyPreview;
 
 use super::{Mode, NormalAction, PlayState};
@@ -83,6 +86,17 @@ impl<'a> NotepadScreen<'a> {
         self.set_normal_cursor_with_navigation_hint(next_cursor, Some(delta));
     }
 
+    /// 現在行を隣の行と入れ替え、選択も追従させる。並べ替えでは再生しない。
+    fn move_normal_line_by(&mut self, delta: isize) {
+        let max_cursor = self.editor.lines.len().saturating_sub(1) as isize;
+        let next_cursor = (self.editor.cursor as isize + delta).clamp(0, max_cursor) as usize;
+        if next_cursor != self.editor.cursor {
+            self.editor.lines.swap(self.editor.cursor, next_cursor);
+            self.editor.cursor = next_cursor;
+            self.editor.list_state.select(Some(next_cursor));
+        }
+    }
+
     pub(super) fn handle_help(&mut self, key: KeyCode) {
         if key == KeyCode::Esc {
             debug_assert_ne!(self.help_origin, Mode::Help);
@@ -94,6 +108,16 @@ impl<'a> NotepadScreen<'a> {
         &mut self,
         key_event: crossterm::event::KeyEvent,
     ) -> NormalAction {
+        if key_event.modifiers.contains(KeyModifiers::ALT)
+            && matches!(key_event.code, KeyCode::Up | KeyCode::Down)
+        {
+            self.editor.pending_delete = false;
+            if !key_event.modifiers.contains(KeyModifiers::CONTROL) {
+                let delta = if key_event.code == KeyCode::Up { -1 } else { 1 };
+                self.move_normal_line_by(delta);
+            }
+            return NormalAction::Continue;
+        }
         if key_event.modifiers == KeyModifiers::NONE
             && matches!(key_event.code, KeyCode::Char('j' | 'k'))
         {
