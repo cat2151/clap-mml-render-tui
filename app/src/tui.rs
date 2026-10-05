@@ -1,4 +1,4 @@
-//! 7 画面（notepad / DAW / keyboard / loop browser / grid sequencer / chord chart /
+//! 8 画面（notepad / DAW / keyboard / loop browser / grid sequencer / drum sequencer / chord chart /
 //! guitar articulation）を
 //! ホストする共有ランタイム。
 //!
@@ -12,6 +12,8 @@ mod keyboard_glue;
 pub(crate) use cmrt_loop_browser as loop_browser;
 mod loop_browser_glue;
 pub(crate) use cmrt_grid_sequencer as grid_sequencer;
+mod drum_sequencer_glue;
+mod drum_sequencer_preview;
 mod grid_sequencer_glue;
 // chord chart は音を鳴らさない画面なので、glue はキーの配送と保存だけ。
 pub(crate) use cmrt_chord_chart as chord_chart;
@@ -84,6 +86,8 @@ pub struct TuiApp<'a> {
     pub(in crate::tui) keyboard: KeyboardScreen<'a>,
     pub(in crate::tui) loop_browser: LoopBrowserScreen,
     pub(in crate::tui) grid_sequencer: GridSequencerScreen,
+    /// 実行中だけ保持する Drum matrix と、選択専用の kit selector。
+    pub(in crate::tui) drum_sequencer: drum_sequencer_glue::DrumSequencerState<'a>,
     /// コード進行の「構成」画面。preview は MML オーバーレイと同じ経路を借りる。
     pub(in crate::tui) chord_chart: ChordChartScreen,
     /// 直近に Chord Chart の通常 preview として sender へ渡した command。

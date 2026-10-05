@@ -65,7 +65,9 @@ fn run() -> Result<()> {
 
     // config 読込とキャッシュ移行は数秒かかりうるので、それより前に反応を返す。
     if matches!(&action, CliAction::BuildPatchCatalogCache) {
-        println!("patch catalog cacheの構築を開始します…");
+        clap_mml_render_tui::patch_catalog_cache::report_progress(
+            "patch catalog cacheの構築を開始します…",
+        );
     }
 
     if let CliAction::Help(help) = &action {
@@ -115,6 +117,9 @@ fn run() -> Result<()> {
         return Ok(());
     }
 
+    if matches!(&action, CliAction::BuildPatchCatalogCache) {
+        clap_mml_render_tui::patch_catalog_cache::report_progress("設定ファイルを読み込みます…");
+    }
     let mut cfg = match &action {
         // 診断コマンドだけは読む config を差し替えられる。既定の置き場を作りに行かないので、
         // 実ユーザーの config.toml には 1 バイトも触らない。
@@ -143,6 +148,11 @@ fn run() -> Result<()> {
     // レンダリング結果キャッシュの置き場を、使用中プラグインごとに分ける。
     // キャッシュキーは MML 文字列の hash なので、音色を指定していない行は
     // プラグインを切り替えても同じキーになる。ここで名前空間を決めておく。
+    if matches!(&action, CliAction::BuildPatchCatalogCache) {
+        clap_mml_render_tui::patch_catalog_cache::report_progress(
+            "レンダリングキャッシュの配置を確認し、旧配置を移行します…",
+        );
+    }
     cmrt_core::init_cache_plugin_namespace(&cfg.plugin_path);
     // 旧配置のキャッシュを現在の配置へ移行し、再利用できないものは掃除する。
     cmrt_core::migrate_legacy_caches();
@@ -152,12 +162,15 @@ fn run() -> Result<()> {
     }
 
     if matches!(&action, CliAction::BuildPatchCatalogCache) {
+        clap_mml_render_tui::patch_catalog_cache::report_progress(
+            "必要な音色の取得状態を確認し、未取得分を取得します…",
+        );
         // 取得に失敗しても、他の plugin の catalog 構築は続ける。
         for download in cmrt_core::prepare_downloaded_patches(&cfg.plugins) {
-            println!("{download}");
+            clap_mml_render_tui::patch_catalog_cache::report_progress(download.to_string());
         }
         let summary = clap_mml_render_tui::patch_catalog_cache::build_and_save(&cfg)?;
-        println!(
+        clap_mml_render_tui::patch_catalog_cache::report_progress(format!(
             "patch catalog cacheを構築しました: patches={} plugins={} measured_loads={} reused_loads={} \
              first_load_failures={} second_load_failures={} catalog_voicings={} catalog_unknown={} path={} source_path={}",
             summary.patch_count,
@@ -170,7 +183,7 @@ fn run() -> Result<()> {
             summary.catalog_unknown_count,
             summary.path.display(),
             summary.source_path.display()
-        );
+        ));
         return Ok(());
     }
 

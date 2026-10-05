@@ -1,14 +1,13 @@
 //! Patchを2つのlive instanceへ読み込み、warmup後の所要時間を計測する。
 
 use std::collections::BTreeMap;
-use std::io::Write as _;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use cmrt_runtime::Config;
 use cmrt_tui_core::patch_load::PatchLoadMeasurement;
 
-use super::measurement_log;
+use super::{measurement_log, progress, report_progress};
 
 pub(super) fn collect_patch_load_measurements(
     cfg: &Config,
@@ -20,9 +19,14 @@ pub(super) fn collect_patch_load_measurements(
     }
     let supervisor =
         cmrt_realtime_play::RealtimePlayServerSupervisor::with_live_instance_count(cfg, 2);
-    supervisor
-        .start_owned_for_fast_midi()
-        .context("patch load計測用realtime play serverを起動できません")?;
+    progress::run(
+        "patch load 計測用 realtime play server を起動",
+        || {
+            supervisor
+                .start_owned_for_fast_midi()
+                .context("patch load計測用realtime play serverを起動できません")
+        },
+    )?;
     let total = pairs.len();
     let progress_started = Instant::now();
     Ok(measure_patch_loads(
@@ -30,16 +34,17 @@ pub(super) fn collect_patch_load_measurements(
         |instance_id, patch| supervisor.prepare_live_patch(instance_id, Some(patch)),
         Instant::now,
         |index, patch| {
-            print!("[{index}/{total}] {patch} ... ");
-            let _ = std::io::stdout().flush();
+            report_progress(format!(
+                "[{index}/{total}] 音色を2回 load して時間を計測します: {patch}"
+            ));
         },
         |index, patch, measurement| {
             if let Err(error) = log.append(patch, measurement) {
                 eprintln!("計測logへ書けません: {patch}: {error:#}");
             }
             let eta = estimate_eta(progress_started.elapsed(), index, total);
-            println!(
-                "first={} second={} ETA={}",
+            report_progress(format!(
+                "[{index}/{total}] first={} second={} ETA={}",
                 measurement
                     .first_load_error
                     .as_deref()
@@ -53,7 +58,7 @@ pub(super) fn collect_patch_load_measurements(
                     (None, None) => "error: no measurement".to_string(),
                 },
                 format_eta(eta),
-            );
+            ));
         },
     ))
 }

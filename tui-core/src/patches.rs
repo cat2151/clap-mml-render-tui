@@ -42,13 +42,21 @@ pub struct PatchListing {
 
 /// 同じ音を鳴らす patch を play server 側でまとめた一覧を集める。
 pub fn collect_patch_listing_from_catalog(plugins: &[CatalogPlugin]) -> Result<PatchListing> {
+    collect_patch_listing_from_catalog_with_progress(plugins, |_, _| {})
+}
+
+/// plugin の解決済み一覧、または各 directory を収集する前に対象を通知する。
+pub fn collect_patch_listing_from_catalog_with_progress(
+    plugins: &[CatalogPlugin],
+    mut before_source: impl FnMut(&CatalogPlugin, Option<&str>),
+) -> Result<PatchListing> {
     let mut listing = PatchListing {
         pairs: Vec::new(),
         merged: HashMap::new(),
     };
     let mut seen = HashSet::new();
     for plugin in plugins {
-        extend_with_plugin(&mut listing, &mut seen, plugin)?;
+        extend_with_plugin(&mut listing, &mut seen, plugin, &mut before_source)?;
     }
     sort_patch_pairs(&mut listing.pairs, PatchSortOrder::Path);
     Ok(listing)
@@ -58,8 +66,10 @@ fn extend_with_plugin(
     listing: &mut PatchListing,
     seen: &mut HashSet<String>,
     plugin: &CatalogPlugin,
+    before_source: &mut impl FnMut(&CatalogPlugin, Option<&str>),
 ) -> Result<()> {
     if let Some(paths) = &plugin.resolved_patches {
+        before_source(plugin, None);
         extend_with_paths(
             listing,
             seen,
@@ -68,6 +78,7 @@ fn extend_with_plugin(
         );
     } else {
         for dir in &plugin.dirs {
+            before_source(plugin, Some(dir));
             let patches = cmrt_core::collect_patch_listing(dir)?;
             extend_with_paths(
                 listing,

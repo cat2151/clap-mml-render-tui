@@ -190,6 +190,7 @@ fn notes(patch: &str, pitch: u8, gate: Duration) -> SenderCommandKind {
 fn line(loop_seconds: f64, repeat: bool) -> SenderCommandKind {
     SenderCommandKind::PlayLine {
         patch: LivePatch::new(Some("ready.sfz")),
+        stop_before_prepare: false,
         program: LineProgram {
             performance: LinePerformance {
                 events: vec![cmrt_chord::TimedMidiEvent {
@@ -407,6 +408,7 @@ fn an_empty_line_stops_the_running_timeline() {
         2,
         SenderCommandKind::PlayLine {
             patch: LivePatch::new(Some("ready.sfz")),
+            stop_before_prepare: false,
             program: LineProgram::silent(),
         },
     );
@@ -421,3 +423,4 @@ mod layers;
 mod line_playback_status;
 mod preload;
 mod prepare_error;
+mod replacement;

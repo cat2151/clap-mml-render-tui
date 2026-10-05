@@ -285,7 +285,10 @@ impl PatchSelect<'_> {
 
     /// host が selector の外のキー（演奏設定など）を拾わず、全キーを [`Self::handle_key`] へ渡すべきか。
     pub fn captures_all_keys(&self) -> bool {
-        self.filter_editing || self.auto_reverb_overlay_open() || self.plugin_menu.is_some()
+        self.drum_kit_only
+            || self.filter_editing
+            || self.auto_reverb_overlay_open()
+            || self.plugin_menu.is_some()
     }
 
     /// `display` の試聴・確定で chain に入れる auto reverb の 1 段。掛けないとき

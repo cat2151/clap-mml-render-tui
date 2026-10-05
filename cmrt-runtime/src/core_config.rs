@@ -151,7 +151,17 @@ pub fn catalog_plugins(cfg: &Config) -> Vec<CatalogPlugin> {
 /// 載せたぶんと外したぶんを 1 回の走査で同時に返す。外れた判定を別の関数で
 /// 書き直すと、条件がずれて「一覧には出ないのに『外していません』と言う」状態になる。
 pub fn catalog_plugins_detailed(cfg: &Config) -> (Vec<CatalogPlugin>, Vec<SkippedCatalogPlugin>) {
-    catalog_plugins_with(cfg, installed_plugin_profiles(cfg))
+    catalog_plugins_detailed_with_progress(cfg, |_| {})
+}
+
+/// 各 plugin の音色 source を探索する前に、対象名を通知する。
+pub fn catalog_plugins_detailed_with_progress(
+    cfg: &Config,
+    mut before_plugin: impl FnMut(&str),
+) -> (Vec<CatalogPlugin>, Vec<SkippedCatalogPlugin>) {
+    let installed = installed_plugin_profiles(cfg, &mut before_plugin);
+    before_plugin(crate::PRIMARY_PLUGIN_PROFILE_NAME);
+    catalog_plugins_with(cfg, installed)
 }
 
 /// カタログから外したプラグインだけが要るとき用。
@@ -287,7 +297,10 @@ fn primary_catalog_plugin(cfg: &Config) -> CatalogPlugin {
 ///
 /// 並びはプロファイル名の昇順（`BTreeMap` の順）。添字で対応づける表と
 /// 揃えるため、決まった順であることだけが要件。
-fn installed_plugin_profiles(cfg: &Config) -> Vec<InstalledProfile> {
+fn installed_plugin_profiles(
+    cfg: &Config,
+    before_plugin: &mut impl FnMut(&str),
+) -> Vec<InstalledProfile> {
     // 既定プラグインが定まらない config では混在させない。`plugin_path` が空なのは
     // 「どのプラグインも指していない」ということで、そもそも entry をロードできない
     // （読み手が「空です」と弾く）。同定できない以上、既定プラグインと同じものを
@@ -298,6 +311,7 @@ fn installed_plugin_profiles(cfg: &Config) -> Vec<InstalledProfile> {
     cmrt_server_config::installed_plugin_profiles(&cfg.plugins)
         .into_iter()
         .map(|(name, profile)| {
+            before_plugin(&name);
             let resolved = cmrt_server_config::resolve_patch_catalog(
                 profile.plugin_id.as_deref(),
                 &profile.plugin_path,

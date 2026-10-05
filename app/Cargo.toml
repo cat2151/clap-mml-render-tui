@@ -15,6 +15,7 @@ cmrt-effect-chain-select = { path = "../effect-chain-select" }
 cmrt-config-editor = { path = "../config-editor-lib" }
 cmrt-daw = { path = "../daw" }
 cmrt-grid-sequencer = { path = "../grid-sequencer" }
+cmrt-drum-sequencer = { path = "../drum-sequencer" }
 cmrt-patches = { path = "../patches" }
 cmrt-history = { path = "../history" }
 cmrt-keyboard = { path = "../keyboard" }

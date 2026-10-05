@@ -81,6 +81,7 @@ fn failed_or_silent_lines_do_not_publish_an_interval() {
         2,
         SenderCommandKind::PlayLine {
             patch: LivePatch::new(Some("ready.sfz")),
+            stop_before_prepare: false,
             program: LineProgram::silent(),
         },
     );
@@ -137,6 +138,7 @@ fn a_long_smf_line_is_sent_whole_and_publishes_an_interval() {
         1,
         SenderCommandKind::PlayLine {
             patch: LivePatch::new(Some("ready.sfz")),
+            stop_before_prepare: false,
             program: LineProgram::once(LinePerformance {
                 events: events.clone(),
                 loop_seconds,

@@ -1,0 +1,10 @@
+[package]
+name = "cmrt-drum-sequencer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cmrt-tui-core = { path = "../tui-core" }
+# キー入力と描画は既存の screen crate と同じ版を使う。
+crossterm = "0.29"
+ratatui = "0.30"

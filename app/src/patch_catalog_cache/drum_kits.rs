@@ -13,10 +13,49 @@ use cmrt_tui_core::patch_plugins::PatchPlugins;
 pub(super) fn record(
     plugins: &[CatalogPlugin],
     measurements: &mut BTreeMap<String, PatchLoadMeasurement>,
-) {
+) -> Vec<String> {
     let patch_plugins = PatchPlugins::from_catalog(plugins.to_vec());
+    let mut diagnostics = Vec::new();
+    let total = measurements
+        .keys()
+        .filter(|display| {
+            cmrt_core::is_sfz_patch_path(display) || cmrt_core::is_floe_preset_path(display)
+        })
+        .count();
+    let mut current = 0;
     for (display, measurement) in measurements.iter_mut() {
+        if cmrt_core::is_sfz_patch_path(display) || cmrt_core::is_floe_preset_path(display) {
+            current += 1;
+            super::report_progress(format!(
+                "  [{current}/{total}] Drum kit か判定します: {display}"
+            ));
+        }
         measurement.drum_kit = is_drum_kit(&patch_plugins, display);
+        // load 計測を再利用しても、割当は必ず今回の file から取得する。
+        measurement.drum_kit_notes = None;
+        if measurement.drum_kit {
+            super::report_progress(format!(
+                "  Drum kit の割当 note 一覧を抽出します: {display}"
+            ));
+            match note_assignments(&patch_plugins, display) {
+                Ok(notes) => measurement.drum_kit_notes = Some(notes),
+                Err(error) => diagnostics.push(format!(
+                    "drum kit note 一覧の抽出失敗: {display}: {error:#}"
+                )),
+            }
+        }
+    }
+    diagnostics
+}
+
+fn note_assignments(patch_plugins: &PatchPlugins, display: &str) -> anyhow::Result<Vec<u8>> {
+    let plugin = patch_plugins.for_patch(display)?;
+    let path = plugin.base.resolve(display);
+    let path = Path::new(&path);
+    if cmrt_core::is_sfz_patch_path(display) {
+        cmrt_core::sfz_note_assignments(path)
+    } else {
+        cmrt_core::floe_note_assignments(path)
     }
 }
 

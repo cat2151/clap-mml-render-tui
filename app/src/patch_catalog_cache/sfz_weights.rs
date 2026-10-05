@@ -17,8 +17,17 @@ pub(super) fn record(
 ) -> Vec<String> {
     let patch_plugins = PatchPlugins::from_catalog(plugins.to_vec());
     let mut failed = Vec::new();
+    let total = measurements
+        .keys()
+        .filter(|display| cmrt_core::is_sfz_patch_path(display))
+        .count();
+    let mut current = 0;
     for (display, measurement) in measurements.iter_mut() {
         let weight = if cmrt_core::is_sfz_patch_path(display) {
+            current += 1;
+            super::report_progress(format!(
+                "  [{current}/{total}] SFZ sample の数と容量を集計します: {display}"
+            ));
             let weight = weigh(&patch_plugins, display);
             if weight.is_none() {
                 failed.push(display.clone());

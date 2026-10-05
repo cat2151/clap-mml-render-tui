@@ -79,6 +79,7 @@ enum SenderCommandKind {
     PlayLine {
         patch: LivePatch,
         program: LineProgram,
+        stop_before_prepare: bool,
     },
     /// 複数 instance の one-shot を 1 本の timeline として鳴らす。
     PlayLayers {
@@ -199,6 +200,20 @@ impl MmlOverlaySender {
         self.enqueue(SenderCommandKind::PlayLine {
             patch: patch.into(),
             program,
+            stop_before_prepare: false,
+        })
+    }
+
+    /// 古い予約イベントを消してから音色を準備し、単発の行を送る。
+    /// Stop と PlayLine を別々に積むと queue の圧縮で Stop が消えるため、1 command にする。
+    pub fn stop_and_play_line(&self, patch: impl Into<LivePatch>, program: LineProgram) -> u64 {
+        if program.is_silent() {
+            return self.stop();
+        }
+        self.enqueue(SenderCommandKind::PlayLine {
+            patch: patch.into(),
+            program,
+            stop_before_prepare: true,
         })
     }
 
@@ -344,7 +359,14 @@ fn run_sender<S: SoundSink + Send + Sync + 'static>(
                     log_superseded_after_load(command.id, &latest_command_id);
                 }
             }
-            SenderCommandKind::PlayLine { patch, program } => {
+            SenderCommandKind::PlayLine {
+                patch,
+                program,
+                stop_before_prepare,
+            } => {
+                if stop_before_prepare {
+                    voice.stop(&*sink, "replace-line");
+                }
                 let ready = prepare_line_if_needed(&mut voice, &*sink, &status, &patch);
                 if ready && !is_superseded(command.id, &latest_command_id) {
                     let played = voice.play_line(&*sink, &program);

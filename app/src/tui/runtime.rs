@@ -196,6 +196,12 @@ impl<'a> TuiApp<'a> {
                     if key.kind == KeyEventKind::Press {
                         input_timing.key_received(&key, self.active_screen);
                     }
+                    if self.active_screen == PrimaryScreen::DrumSequencer
+                        && self.drum_sequencer.selector_open()
+                    {
+                        self.dispatch_drum_sequencer_key_event(key);
+                        continue;
+                    }
                     // MML オーバーレイは開いている間キーを総取りする。keyboard 画面だけは
                     // Release も届くので、文字が二重に入らないよう Press だけ渡す。
                     if self.mml_overlay.is_open() {
@@ -279,6 +285,12 @@ impl<'a> TuiApp<'a> {
                                     }
                                 }
                             }
+                        }
+                        continue;
+                    }
+                    if self.active_screen == PrimaryScreen::DrumSequencer {
+                        if self.dispatch_drum_sequencer_key_event(key) {
+                            break;
                         }
                         continue;
                     }

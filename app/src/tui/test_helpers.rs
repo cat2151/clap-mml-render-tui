@@ -41,6 +41,7 @@ impl TuiApp<'static> {
             chord_chart_auto_reverb_rules: Default::default(),
             mml_overlay_sender: None,
             grid_sequencer: grid_sequencer::GridSequencerScreen::new(None),
+            drum_sequencer: Default::default(),
             // テストでは実 `%LOCALAPPDATA%` の chord_chart.json を読ませない
             // （`load_song()` はファイルを読む）。代わりに section 1 つの曲を直に置く。
             //

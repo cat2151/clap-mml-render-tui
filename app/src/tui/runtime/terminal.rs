@@ -33,6 +33,7 @@ impl TuiApp<'_> {
             // loop browser の textarea は loop tree の `/` 絞り込み入力欄だけ。
             PrimaryScreen::LoopBrowser => self.loop_browser.state.filter_input_active(),
             PrimaryScreen::GridSequencer => false,
+            PrimaryScreen::DrumSequencer => self.drum_sequencer.uses_textarea_cursor(),
             // chord chart の textarea は section の進行 / 名前を打つ `e` / `n` の欄だけ。
             PrimaryScreen::ChordChart => self.chord_chart.line_input_open(),
             // guitar articulation の textarea は MML 入力欄と、effect の list の絞り込み欄。

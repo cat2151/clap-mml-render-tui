@@ -18,6 +18,9 @@ pub struct PatchSelectRequest {
     pub role_index: PatchRoleIndex,
     /// 今の音色の Role が分からないときに開く Role。`None` なら `ALL`。
     pub initial_role: Option<PatchRole>,
+    /// Drum tracks / Drum kit に固定し、候補移動・検索・確定・取消だけを使う。
+    /// kit は名前の Role にかかわらず `drum_kit=true` の全 patch。
+    pub drum_kit_only: bool,
     /// 設定不足でカタログから外れたプラグインの案内。
     pub catalog_notes: Vec<String>,
     pub load_measurements: BTreeMap<String, PatchLoadMeasurement>,
@@ -38,6 +41,7 @@ impl PatchSelect<'_> {
             user_presets,
             mut role_index,
             initial_role,
+            drum_kit_only,
             catalog_notes,
             load_measurements,
             favorites,
@@ -69,13 +73,23 @@ impl PatchSelect<'_> {
             .filter(|_| role == Some(PatchRole::Drum));
         let current_index =
             current.and_then(|current| all.iter().position(|patch| patch.display() == current));
-        let (group_cursor, preset_cursor) =
-            prepared_presets.start_cursors_for_patch(role, drum, current_index);
+        let (group_cursor, preset_cursor) = if drum_kit_only {
+            let group = FilterGroup::ALL
+                .iter()
+                .position(|group| group.role() == Some(PatchRole::Drum))?;
+            let preset = prepared_presets
+                .for_role(group)
+                .iter()
+                .position(|preset| preset.is_drum_kit)?;
+            (group, preset)
+        } else {
+            prepared_presets.start_cursors_for_patch(role, drum, current_index)
+        };
         let filtered = Arc::clone(&prepared_presets.for_role(group_cursor)[preset_cursor].matches);
         let cursor = current_index
             .and_then(|current| filtered.iter().position(|index| *index == current))
             .unwrap_or(0);
-        let auto_reverb = auto_reverb.map(|host| {
+        let auto_reverb = auto_reverb.filter(|_| !drum_kit_only).map(|host| {
             let mut panel = AutoReverbPanel::new(host);
             panel.set_user_presets(&user_presets);
             panel
@@ -91,6 +105,7 @@ impl PatchSelect<'_> {
             user_presets,
             role_index,
             prepared_presets,
+            drum_kit_only,
             group_cursor,
             preset_cursor,
             focus: PatchSelectFocus::Patches,

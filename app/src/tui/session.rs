@@ -282,6 +282,7 @@ impl<'a> TuiApp<'a> {
                     effect_plugins: grid_effect_plugins,
                 },
             ),
+            drum_sequencer: Default::default(),
             // 保存済みの曲。ネットワークには触らないので起動時に読んでよい
             // （この画面がネットワークを要するのはコード進行カタログだけ）。
             // 読めなかったとき（初回 / 壊れている）に曲をでっち上げるのはここではない。

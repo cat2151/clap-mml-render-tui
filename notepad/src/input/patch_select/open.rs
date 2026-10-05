@@ -55,6 +55,7 @@ impl<'a> NotepadScreen<'a> {
             user_presets: cmrt_history::load_mml_patch_filter_presets(),
             role_index: patch_role_index,
             initial_role: None,
+            drum_kit_only: false,
             catalog_notes: self.catalog_notes.clone(),
             load_measurements,
             favorites,

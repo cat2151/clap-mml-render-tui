@@ -89,3 +89,96 @@ fn drum_kit_is_not_the_start_preset_for_a_drum_kit_patch() {
 
     assert!(!select.presets()[select.preset_cursor()].is_drum_kit);
 }
+
+fn fixed() -> PatchSelect<'static> {
+    PatchSelect::open(PatchSelectRequest {
+        patches: pairs(&[
+            "Drums/Kick 1.fxp",
+            "Drums/Full Drums.sfz",
+            "Kits/909.sfz",
+            "Pads/Warm Pad.fxp",
+        ]),
+        current: Some("Pads/Warm Pad.fxp".to_string()),
+        drum_kit_only: true,
+        load_measurements: ["Drums/Full Drums.sfz", "Kits/909.sfz"]
+            .into_iter()
+            .map(|patch| (patch.to_string(), kit()))
+            .collect(),
+        ..Default::default()
+    })
+    .unwrap()
+}
+
+#[test]
+fn fixed_mode_keeps_every_kit_and_cannot_change_role_or_preset() {
+    let mut select = fixed();
+    let initial = (select.group_cursor(), select.preset_cursor());
+    assert_eq!(initial.0, DRUM_GROUP);
+    assert!(select.presets()[initial.1].is_drum_kit);
+    assert!(select.captures_all_keys());
+
+    // Left/Right and hjkl cannot move focus to an editable Role/Preset pane.
+    for code in [
+        KeyCode::Left,
+        KeyCode::Left,
+        KeyCode::Up,
+        KeyCode::Home,
+        KeyCode::Right,
+        KeyCode::Char('h'),
+        KeyCode::Char('j'),
+        KeyCode::End,
+        KeyCode::PageDown,
+    ] {
+        assert_eq!(select.handle_key(press(code)), PatchSelectAction::Continue);
+        assert_eq!((select.group_cursor(), select.preset_cursor()), initial);
+        assert_eq!(select.focus(), PatchSelectFocus::Patches);
+        assert_eq!(filtered(&select), ["Drums/Full Drums.sfz", "Kits/909.sfz"]);
+    }
+    assert_eq!(
+        select.handle_key(press(KeyCode::Enter)),
+        PatchSelectAction::Confirm("Kits/909.sfz".to_string())
+    );
+}
+
+#[test]
+fn fixed_mode_search_and_actions_never_broaden_or_audition_the_kit_set() {
+    let mut select = fixed();
+    for ch in ['a', 'r', 'm', 'e', 'E', 's', ' '] {
+        assert_eq!(
+            select.handle_key(press(KeyCode::Char(ch))),
+            PatchSelectAction::Continue
+        );
+    }
+    assert_eq!(select.handle_key(ctrl('l')), PatchSelectAction::Continue);
+    assert!(select.plugin_menu.is_none());
+    assert!(select.auto_reverb_panel().is_none());
+    assert_eq!(filtered(&select), ["Drums/Full Drums.sfz", "Kits/909.sfz"]);
+
+    type_text(&mut select, "warm|909");
+    assert_eq!(filtered(&select), ["Kits/909.sfz"]);
+    select.handle_key(press(KeyCode::Enter));
+    select.set_favorites(vec!["Pads/Warm Pad.fxp".to_string()]);
+    assert_eq!(filtered(&select), ["Kits/909.sfz"]);
+    select.handle_key(press(KeyCode::Char('/')));
+    for _ in 0.."warm|909".len() {
+        select.handle_key(press(KeyCode::Backspace));
+    }
+    type_text(&mut select, "warm");
+    assert_eq!(select.filtered_len(), 0);
+    assert_eq!(select.previewed(), Some("Pads/Warm Pad.fxp"));
+}
+
+#[test]
+fn fixed_mode_ignores_release_and_repeat_confirmation() {
+    use crossterm::event::KeyEventKind;
+    let mut select = fixed();
+    for kind in [KeyEventKind::Release, KeyEventKind::Repeat] {
+        let mut key = press(KeyCode::Enter);
+        key.kind = kind;
+        assert_eq!(select.handle_key(key), PatchSelectAction::Continue);
+    }
+    assert_eq!(
+        select.handle_key(press(KeyCode::Esc)),
+        PatchSelectAction::Cancel
+    );
+}

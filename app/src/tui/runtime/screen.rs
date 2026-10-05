@@ -71,6 +71,7 @@ impl<'a> TuiApp<'a> {
             PrimaryScreen::GridSequencer => {
                 !self.grid_sequencer.help_open && !self.grid_sequencer.history_open()
             }
+            PrimaryScreen::DrumSequencer => !self.drum_sequencer.selector_open(),
             PrimaryScreen::ChordChart => {
                 !self.chord_chart.help_open && !self.chord_chart.line_input_open()
             }
@@ -121,6 +122,7 @@ impl<'a> TuiApp<'a> {
             PrimaryScreen::Keyboard => self.finish_keyboard(),
             PrimaryScreen::LoopBrowser => self.stop_loop_browser(),
             PrimaryScreen::GridSequencer => self.stop_grid_sequencer_playback(),
+            PrimaryScreen::DrumSequencer => self.finish_drum_sequencer(),
             // Chord/Bass が共有する layered timeline を明示的に止めてから、
             // MML overlay へ両 instance を明け渡す。
             PrimaryScreen::ChordChart => self.stop_chord_chart_preview(),
@@ -143,6 +145,7 @@ impl<'a> TuiApp<'a> {
             // オーバーレイを閉じた時点では鳴らし直さない。
             // guitar articulation も `b` / `space` を押したときだけ鳴る。
             PrimaryScreen::ChordChart
+            | PrimaryScreen::DrumSequencer
             | PrimaryScreen::GuitarArticulation
             | PrimaryScreen::Notepad
             | PrimaryScreen::DailyDaw
@@ -156,6 +159,7 @@ impl<'a> TuiApp<'a> {
             PrimaryScreen::Keyboard => self.finish_keyboard(),
             PrimaryScreen::LoopBrowser => self.stop_loop_browser(),
             PrimaryScreen::GridSequencer => self.finish_grid_sequencer(),
+            PrimaryScreen::DrumSequencer => self.finish_drum_sequencer(),
             PrimaryScreen::ChordChart => {
                 self.stop_chord_chart_preview();
                 // キーごとの保存を取りこぼしていたらここで拾う。
@@ -199,6 +203,10 @@ impl<'a> TuiApp<'a> {
             }
             PrimaryScreen::LoopBrowser => self.begin_loop_browser_startup(),
             PrimaryScreen::GridSequencer => self.enter_grid_sequencer(),
+            PrimaryScreen::DrumSequencer => {
+                self.notepad.mode = Mode::Normal;
+                self.active_screen = PrimaryScreen::DrumSequencer;
+            }
             // 鳴らすものは無い（曲は起動時に読んである）。読めなかったときだけ、
             // ここで 1 回だけコード進行を抽選する（起動時に引かないのは、カタログの
             // 初回取得を待つのが chord chart を開く人だけで済むようにするため）。

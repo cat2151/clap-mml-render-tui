@@ -1,4 +1,4 @@
-//! 主要画面（notepad / DAW / keyboard / loop browser / grid sequencer / chord chart /
+//! 主要画面（notepad / DAW / keyboard / loop browser / grid sequencer / drum sequencer / chord chart /
 //! guitar articulation）の
 //! 切替メニュー。
 //!
@@ -26,18 +26,20 @@ pub enum PrimaryScreen {
     Keyboard,
     LoopBrowser,
     GridSequencer,
+    DrumSequencer,
     ChordChart,
     GuitarArticulation,
 }
 
 impl PrimaryScreen {
-    const ALL: [(char, Self, &'static str); 8] = [
+    const ALL: [(char, Self, &'static str); 9] = [
         ('N', Self::Notepad, "Notepad"),
         ('A', Self::DailyDaw, "Daily DAW"),
         ('D', Self::Daw, "DAW"),
         ('K', Self::Keyboard, "Keyboard"),
         ('L', Self::LoopBrowser, "Loop Browser"),
         ('G', Self::GridSequencer, "Grid Sequencer"),
+        ('S', Self::DrumSequencer, "Drum Sequencer"),
         ('C', Self::ChordChart, "Chord Chart"),
         ('E', Self::GuitarArticulation, "Guitar Articulation"),
     ];

@@ -32,14 +32,14 @@ The setup script installs the Linux packages needed for this workspace's `rodio`
 - cat2151のライブラリは、「revision固定を禁止。さらに、古い lock を放置せず最新 HEAD へ追従すること」
 - issue-notes/は更新を禁止
 - README.mdは更新禁止。README.ja.mdから生成されるので。
-- handoff資料を作るときは、project rootに書く（docs/ではなく）
 - ./target/release に clap-mml-realtime-play-server.exe をアドホックにcpすることを禁止（根が深いトラブルの温床になった）。
 - ビルドロック回避を含め、`--target-dir`等で既定以外のtargetディレクトリを作成・使用することを禁止
 
-# 完了時
+# rustソースを変更して作業完了報告時
 - 450行をoverした*.rsは、単一責任の原則に従いファイル分割
 - cargoのclippyとfmtを使うこと
 - リリースビルド（ cargo build --release ）をすること
   - もし local ../clap-mml-play-server/ をメンテした場合、 ../clap-mml-play-server/ のリリースビルドをすること
   - いずれも人間が動作確認する用（debugビルドだと音が途切れて「バグか？」となったのでリリースビルドで動作確認する）
+- もしcatalog再構築を人間に依頼しようとしたら、かわりに自分でやること
 - プルリクエストは日本語で書くこと

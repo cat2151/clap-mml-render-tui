@@ -235,6 +235,7 @@ impl<'a> PatchAuditionSelect<'a> {
                     user_presets: self.filter_presets.clone(),
                     role_index: self.role_index.clone(),
                     initial_role: self.initial_role,
+                    drum_kit_only: false,
                     catalog_notes: self.catalog_notes.clone(),
                     load_measurements: self.load_measurements.clone(),
                     favorites: self.favorites.clone(),

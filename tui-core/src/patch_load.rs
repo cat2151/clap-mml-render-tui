@@ -30,6 +30,9 @@ pub struct PatchLoadMeasurement {
     /// 鍵ごとに別の音を割り当てた kit（drum kit・効果音 kit）か。`.sfz` と Floe preset だけを判定する。
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub drum_kit: bool,
+    /// kit の全 note-on 割当。None は旧 cache/抽出失敗、Some([]) は取得済みで割当なし。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drum_kit_notes: Option<Vec<u8>>,
 }
 
 /// これ以上の sample 総容量を持つ `.sfz` は、offline render の全量ロードが数秒を超える。

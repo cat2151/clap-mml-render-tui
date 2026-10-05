@@ -41,6 +41,7 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
             grid_sequencer::draw(&app.grid_sequencer, &connection, f);
         }
         PrimaryScreen::ChordChart => chord_chart::draw(&app.chord_chart, f),
+        PrimaryScreen::DrumSequencer => app.draw_drum_sequencer(f),
         PrimaryScreen::GuitarArticulation => {
             let effect_chain = cmrt_effect_chain_select::chain_json(
                 app.guitar_articulation.sounding_effect_chain(),
@@ -105,6 +106,9 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
     // 通常運転ではない play server を掴んでいるときだけ右上に出る。DAW 画面は
     // 自前の描画ループを持つので、あちらでも同じものを呼んでいる（ADR 0017）。
     cmrt_tui_core::server_profile_badge::draw(f, app.play_server.server_binary());
+    if app.active_screen == PrimaryScreen::DrumSequencer {
+        app.drum_sequencer.draw_selector(f);
+    }
     // 音が鳴らない理由なので、どの画面・どのオーバーレイよりも前に出す。
     if let Some(failure) = app.play_server_notice() {
         super::play_server_notice::draw(f, &failure);

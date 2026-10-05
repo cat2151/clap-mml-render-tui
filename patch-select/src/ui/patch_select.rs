@@ -10,9 +10,6 @@ use ratatui::{
 
 use cmrt_tui_core::{
     status::{base_style, LIST_HIGHLIGHT_SYMBOL},
-    text_input::{
-        build_query_textarea_widget, single_line_textarea_cursor_position, textarea_value,
-    },
     theme::{cursor_highlight_style, MONOKAI_FG, MONOKAI_PINK, MONOKAI_YELLOW},
     ui::centered_rect,
 };
@@ -26,8 +23,10 @@ use measurement_columns::sample_size_cell;
 use measurement_columns::{format_load_time, sample_size_label};
 
 mod measurement_columns;
+mod query;
 
-const QUERY_PLACEHOLDER: &str = r"例: warm pad|strings";
+use query::draw_query;
+
 /// 絞り込み欄の高さ（枠2行 + 入力1行）。
 const QUERY_HEIGHT: u16 = 3;
 const CATEGORY_COLUMN_WIDTH: u16 = 12;
@@ -151,49 +150,6 @@ fn draw_notes(select: &PatchSelect<'_>, frame: &mut Frame<'_>, area: Rect) {
     );
 }
 
-fn draw_query(
-    select: &PatchSelect<'_>,
-    frame: &mut Frame<'_>,
-    area: Rect,
-    options: &PatchSelectDrawOptions<'_>,
-) {
-    let textarea = select.query_textarea();
-    let value = textarea_value(textarea);
-    let (title, placeholder, border_color) = if select.filter_editing() {
-        (
-            " Regex (空白=AND)  Enter:絞り込み確定  Esc:前回へ戻す ".to_string(),
-            QUERY_PLACEHOLDER,
-            MONOKAI_YELLOW,
-        )
-    } else {
-        (
-            query_title(options.show_play_settings_hint),
-            "/ で絞り込み",
-            MONOKAI_FG,
-        )
-    };
-    frame.render_widget(
-        &build_query_textarea_widget(textarea, &value, &title, placeholder, border_color),
-        area,
-    );
-    if select.filter_editing() {
-        // 編集中だけ端末カーソルを Regex 欄へ移す。通常時は pane 操作中だと分かるよう、
-        // 呼び出し元の MML カーソルを上書きしない。
-        frame.set_cursor_position(single_line_textarea_cursor_position(area, textarea));
-    }
-}
-
-fn query_title(show_play_settings_hint: bool) -> String {
-    let play_settings = if show_play_settings_hint {
-        "  S:演奏設定"
-    } else {
-        ""
-    };
-    format!(
-        " Regex (空白=AND)  /:編集  Enter:音色決定  Esc:取消  Space:試聴  m:plugin solo/mute{play_settings} "
-    )
-}
-
 fn pane_block(title: String, focused: bool) -> Block<'static> {
     Block::default()
         .borders(Borders::ALL)
@@ -203,6 +159,10 @@ fn pane_block(title: String, focused: bool) -> Block<'static> {
 }
 
 fn draw_groups(select: &PatchSelect<'_>, frame: &mut Frame<'_>, area: Rect) {
+    if select.drum_kit_only() {
+        draw_fixed_pane(" Role (固定) ", "Drum tracks", frame, area);
+        return;
+    }
     let block = pane_block(
         " Role  ←→/hl ".to_string(),
         select.focus() == PatchSelectFocus::Groups,
@@ -231,6 +191,10 @@ fn draw_groups(select: &PatchSelect<'_>, frame: &mut Frame<'_>, area: Rect) {
 }
 
 fn draw_presets(select: &PatchSelect<'_>, frame: &mut Frame<'_>, area: Rect) {
+    if select.drum_kit_only() {
+        draw_fixed_pane(" Preset (固定) ", "Drum kit", frame, area);
+        return;
+    }
     let block = pane_block(
         " Preset  A:add ".to_string(),
         select.focus() == PatchSelectFocus::Presets,
@@ -258,6 +222,15 @@ fn draw_presets(select: &PatchSelect<'_>, frame: &mut Frame<'_>, area: Rect) {
             .highlight_symbol(LIST_HIGHLIGHT_SYMBOL),
         area,
         &mut state,
+    );
+}
+
+fn draw_fixed_pane(title: &str, label: &str, frame: &mut Frame<'_>, area: Rect) {
+    frame.render_widget(
+        Paragraph::new(label)
+            .block(pane_block(title.to_string(), false))
+            .style(base_style()),
+        area,
     );
 }
 
@@ -412,8 +385,13 @@ fn load_label(select: &PatchSelect<'_>, patch: &str) -> String {
 }
 
 fn list_title(select: &PatchSelect<'_>) -> String {
+    let random = if select.drum_kit_only() {
+        ""
+    } else {
+        " R:random"
+    };
     if select.filter_error().is_some() {
-        return " Regex error  ↑↓/jk Home/End R:random ".to_string();
+        return format!(" Regex error  ↑↓/jk Home/End{random} ");
     }
     let list_len = select.filtered_len();
     let position = if list_len == 0 {
@@ -422,7 +400,7 @@ fn list_title(select: &PatchSelect<'_>) -> String {
         select.cursor() + 1
     };
     format!(
-        " 音色 ({position}/{list_len}/{}) ↑↓/jk Home/End R:random ",
+        " 音色 ({position}/{list_len}/{}) ↑↓/jk Home/End{random} ",
         select.total()
     )
 }

@@ -8,6 +8,44 @@ use ratatui::{backend::TestBackend, buffer::Buffer, layout::Rect, text::Span, Te
 
 const SCREEN: Rect = Rect::new(0, 0, 120, 30);
 
+#[test]
+fn fixed_kit_mode_shows_only_available_controls_and_fixed_panes() {
+    let select = PatchSelect::open(PatchSelectRequest {
+        patches: vec![PatchCatalogEntry::from_display("909.sfz".to_string())],
+        drum_kit_only: true,
+        load_measurements: [(
+            "909.sfz".to_string(),
+            cmrt_tui_core::patch_load::PatchLoadMeasurement {
+                drum_kit: true,
+                ..Default::default()
+            },
+        )]
+        .into(),
+        ..Default::default()
+    })
+    .unwrap();
+    let text = lines(&render(&select, SCREEN, &PatchSelectDrawOptions::default())).join("\n");
+    for available in [
+        "Drum tracks",
+        "Drum kit",
+        "固定",
+        "/:編集",
+        "Enter:kit",
+        "Esc:取消",
+    ] {
+        assert!(text.contains(available), "missing {available}");
+    }
+    for unavailable in [
+        "Space:試聴",
+        "plugin solo/mute",
+        "演奏設定",
+        "A:add",
+        "R:random",
+    ] {
+        assert!(!text.contains(unavailable), "unexpected {unavailable}");
+    }
+}
+
 fn patch_select_with_favorites(patches: &[&str], favorites: &[&str]) -> PatchSelect<'static> {
     PatchSelect::open(PatchSelectRequest {
         patches: patches

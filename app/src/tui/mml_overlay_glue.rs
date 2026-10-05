@@ -161,6 +161,7 @@ impl TuiApp<'_> {
     pub(in crate::tui) fn pump_mml_overlay(&mut self) {
         self.sync_mml_overlay_patch_catalog();
         self.sync_chord_chart_patch_select_catalog();
+        self.sync_drum_sequencer_catalog();
         if let Some(sender) = &self.mml_overlay_sender {
             self.mml_overlay.sync_sender_status(&sender.status());
         }

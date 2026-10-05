@@ -13,12 +13,19 @@ use measurements::collect_patch_load_measurements;
 #[cfg(test)]
 use measurements::{estimate_eta, format_eta, measure_patch_loads};
 
+mod cache_writer;
 mod drum_kits;
 mod measurement_log;
 mod measurements;
+mod patch_metadata;
 mod previous_measurements;
+mod progress;
 mod sfz_weights;
 mod source_cache;
+
+use cache_writer::{replace_file, write_cache};
+use patch_metadata::{collect_patch_voicings, describe_patches};
+pub use progress::report as report_progress;
 
 const CACHE_FORMAT_VERSION: u32 = 5;
 const CACHE_RELATIVE_PATH: &str = "patch-catalog/catalog.json";
@@ -122,39 +129,89 @@ pub fn build_and_save(cfg: &Config) -> Result<BuildSummary> {
     let path = cache_file_path().context("patch catalog cacheの保存先を取得できません")?;
     let source_path =
         source_cache::cache_file_path().context("catalog source cacheの保存先を取得できません")?;
-    let (plugins, skipped) = cmrt_runtime::catalog_plugins_detailed(cfg);
+    let (plugins, skipped) = progress::run("plugin ごとの音色 source を探索", || {
+        Ok(cmrt_runtime::catalog_plugins_detailed_with_progress(
+            cfg,
+            |name| report_progress(format!("  {name}: 音色 source を探索します…")),
+        ))
+    })?;
     // scanが終わった時点でserver用の小さい結果を確定する。後続の全patch load計測が
     // 失敗しても、次のserver起動で同じcatalog scanを繰り返させない。
-    source_cache::write(&source_path, &plugins)?;
-    let listing = cmrt_tui_core::patches::collect_patch_listing_from_catalog(&plugins)?;
+    progress::run(
+        &format!("音色 source cache を保存: {}", source_path.display()),
+        || source_cache::write(&source_path, &plugins),
+    )?;
+    let listing = progress::run(
+        "plugin ごとの音色一覧を収集・重複整理",
+        || {
+            cmrt_tui_core::patches::collect_patch_listing_from_catalog_with_progress(
+                &plugins,
+                |plugin, dir| {
+                    let source = dir.map_or_else(
+                        || {
+                            format!(
+                                "解決済み一覧 {}件",
+                                plugin.resolved_patches.as_ref().map_or(0, Vec::len)
+                            )
+                        },
+                        str::to_string,
+                    );
+                    report_progress(format!("  {}: 音色一覧を収集します: {source}", plugin.name));
+                },
+            )
+        },
+    )?;
     let pairs = listing.pairs;
-    let mut audio_patches = describe_patches(&plugins, &pairs)?;
+    let mut audio_patches = progress::run(
+        &format!("音色 {}件の分類情報を作成", pairs.len()),
+        || describe_patches(&plugins, &pairs),
+    )?;
     for audio in &mut audio_patches {
         audio.merged = listing.merged.get(&audio.reference.display).cloned();
     }
-    let patch_voicings = collect_patch_voicings(&plugins, &audio_patches);
+    let patch_voicings = progress::run("音色の mono/poly 情報を集計", || {
+        Ok(collect_patch_voicings(&plugins, &audio_patches))
+    })?;
     let catalog_unknown_count = patch_voicings
         .values()
         .filter(|voicing| **voicing == cmrt_realtime_play::PatchVoicing::Unknown)
         .count();
     let log_path = measurement_log::path_next_to(&path);
-    let mut previous = previous_measurements::read(&path);
-    previous.extend(measurement_log::read(&log_path));
+    let previous = progress::run(
+        "既存 catalog と中断時ログから load 計測結果を復元",
+        || {
+            let mut previous = previous_measurements::read(&path);
+            previous.extend(measurement_log::read(&log_path));
+            Ok(previous)
+        },
+    )?;
     let (mut load_measurements, unmeasured) = previous_measurements::partition(&pairs, previous);
     let reused_load_count = load_measurements.len();
-    println!(
+    report_progress(format!(
         "patch全件={} 計測済み(再利用)={} 未計測={}",
         pairs.len(),
         reused_load_count,
         unmeasured.len()
-    );
+    ));
     for (display, _) in &unmeasured {
         println!("  未計測: {display}");
     }
-    let mut log = measurement_log::Writer::open(&log_path)?;
-    load_measurements.extend(collect_patch_load_measurements(cfg, &unmeasured, &mut log)?);
-    let sfz_weight_failures = sfz_weights::record(&plugins, &mut load_measurements);
-    drum_kits::record(&plugins, &mut load_measurements);
+    let mut log = progress::run(
+        &format!("load 計測ログを準備: {}", log_path.display()),
+        || measurement_log::Writer::open(&log_path),
+    )?;
+    load_measurements.extend(progress::run(
+        "未計測音色の load 時間を計測",
+        || collect_patch_load_measurements(cfg, &unmeasured, &mut log),
+    )?);
+    let sfz_weight_failures = progress::run(
+        "SFZ が参照する sample の数と容量を集計",
+        || Ok(sfz_weights::record(&plugins, &mut load_measurements)),
+    )?;
+    let drum_note_failures = progress::run(
+        "Drum kit を判定し、割当 note 一覧を抽出",
+        || Ok(drum_kits::record(&plugins, &mut load_measurements)),
+    )?;
     let measured_load_count = load_measurements
         .values()
         .filter(|measurement| measurement.second_load_ms.is_some())
@@ -167,25 +224,31 @@ pub fn build_and_save(cfg: &Config) -> Result<BuildSummary> {
         .values()
         .filter(|measurement| measurement.second_load_error.is_some())
         .count();
-    let catalog_notes = catalog_notes(&plugins, &skipped);
-    let cache = CacheFile {
-        format_version: CACHE_FORMAT_VERSION,
-        patches: audio_patches
-            .into_iter()
-            .map(|audio| {
-                let display = &audio.reference.display;
-                let measurement = load_measurements
-                    .get(display)
-                    .cloned()
-                    .with_context(|| format!("patch load計測結果がありません: {display}"))?;
-                Ok(CachedPatch { audio, measurement })
-            })
-            .collect::<Result<Vec<_>>>()?,
-        plugins: plugins.iter().map(CachedPlugin::from).collect(),
-        patch_voicings,
-        catalog_notes,
-    };
-    write_cache(&path, &cache)?;
+    let mut catalog_notes = catalog_notes(&plugins, &skipped);
+    catalog_notes.extend(drum_note_failures);
+    let cache = progress::run("catalog の保存データを組み立て", || {
+        Ok(CacheFile {
+            format_version: CACHE_FORMAT_VERSION,
+            patches: audio_patches
+                .into_iter()
+                .map(|audio| {
+                    let display = &audio.reference.display;
+                    let measurement = load_measurements
+                        .get(display)
+                        .cloned()
+                        .with_context(|| format!("patch load計測結果がありません: {display}"))?;
+                    Ok(CachedPatch { audio, measurement })
+                })
+                .collect::<Result<Vec<_>>>()?,
+            plugins: plugins.iter().map(CachedPlugin::from).collect(),
+            patch_voicings,
+            catalog_notes,
+        })
+    })?;
+    progress::run(
+        &format!("patch catalog cache を保存: {}", path.display()),
+        || write_cache(&path, &cache),
+    )?;
     // 残っても次回の構築で同じ結果として読まれるだけなので、消せなくても失敗にしない。
     let _ = fs::remove_file(&log_path);
     for line in sfz_weights::distribution_lines(&load_measurements, &sfz_weight_failures) {
@@ -304,54 +367,6 @@ fn populate_selector_categories(cache: &mut CacheFile) -> Result<()> {
     Ok(())
 }
 
-fn describe_patches(
-    plugins: &[CatalogPlugin],
-    pairs: &[(String, String)],
-) -> Result<Vec<cmrt_core::AudioPatch>> {
-    let patch_plugins = cmrt_tui_core::patch_plugins::PatchPlugins::from_catalog(plugins.to_vec());
-    pairs
-        .iter()
-        .map(|(display, _)| {
-            let index = patch_plugins
-                .index_for_patch(display)
-                .map_err(anyhow::Error::new)?;
-            let info = patch_plugins
-                .audio_info(index)
-                .with_context(|| format!("plugin情報がありません: {display}"))?;
-            Ok(info.describe_patch(display, None))
-        })
-        .collect()
-}
-
-fn collect_patch_voicings(
-    plugins: &[CatalogPlugin],
-    patches: &[cmrt_core::AudioPatch],
-) -> BTreeMap<String, cmrt_realtime_play::PatchVoicing> {
-    let patch_plugins = cmrt_tui_core::patch_plugins::PatchPlugins::from_catalog(plugins.to_vec());
-    patches
-        .iter()
-        .filter_map(|patch| {
-            let info = patch_plugins.audio_info_for_ref(&patch.reference).ok()?;
-            if info.voicing_source() != cmrt_core::PluginVoicingSource::CatalogMetadata {
-                return None;
-            }
-            let voicing = match patch.voicing {
-                cmrt_core::PatchVoicingHint::Known { voicing } => local_voicing(voicing),
-                cmrt_core::PatchVoicingHint::ExternalLookup { .. } => return None,
-            };
-            Some((patch.reference.display.clone(), voicing))
-        })
-        .collect()
-}
-
-fn local_voicing(voicing: cmrt_core::AdapterPatchVoicing) -> cmrt_realtime_play::PatchVoicing {
-    match voicing {
-        cmrt_core::AdapterPatchVoicing::Mono => cmrt_realtime_play::PatchVoicing::Mono,
-        cmrt_core::AdapterPatchVoicing::Poly => cmrt_realtime_play::PatchVoicing::Poly,
-        cmrt_core::AdapterPatchVoicing::Unknown => cmrt_realtime_play::PatchVoicing::Unknown,
-    }
-}
-
 fn validate_catalog_voicings(cache: &CacheFile) -> Result<()> {
     let plugins = cache
         .plugins
@@ -400,50 +415,6 @@ fn catalog_notes(plugins: &[CatalogPlugin], skipped: &[SkippedCatalogPlugin]) ->
         })
         .chain(skipped.iter().map(SkippedCatalogPlugin::notice_line))
         .collect()
-}
-
-fn write_cache(path: &Path, cache: &CacheFile) -> Result<()> {
-    let parent = path
-        .parent()
-        .context("patch catalog cacheの親directoryがありません")?;
-    fs::create_dir_all(parent)?;
-    let bytes = serde_json::to_vec_pretty(cache)?;
-    let temp_path = path.with_extension(format!("json.{}.tmp", std::process::id()));
-    fs::write(&temp_path, bytes)
-        .with_context(|| format!("一時cacheを書けません: {}", temp_path.display()))?;
-    if let Err(error) = replace_file(&temp_path, path) {
-        let _ = fs::remove_file(&temp_path);
-        return Err(error).with_context(|| format!("cacheを置換できません: {}", path.display()));
-    }
-    Ok(())
-}
-
-#[cfg(not(windows))]
-fn replace_file(from: &Path, to: &Path) -> std::io::Result<()> {
-    fs::rename(from, to)
-}
-
-#[cfg(windows)]
-fn replace_file(from: &Path, to: &Path) -> std::io::Result<()> {
-    use std::os::windows::ffi::OsStrExt;
-    use windows_sys::Win32::Storage::FileSystem::{
-        MoveFileExW, MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH,
-    };
-
-    let from: Vec<u16> = from.as_os_str().encode_wide().chain(Some(0)).collect();
-    let to: Vec<u16> = to.as_os_str().encode_wide().chain(Some(0)).collect();
-    let result = unsafe {
-        MoveFileExW(
-            from.as_ptr(),
-            to.as_ptr(),
-            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
-        )
-    };
-    if result == 0 {
-        Err(std::io::Error::last_os_error())
-    } else {
-        Ok(())
-    }
 }
 
 #[cfg(test)]

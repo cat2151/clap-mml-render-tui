@@ -27,6 +27,7 @@ fn menu_accepts_all_screen_initials_case_insensitively() {
         ('k', PrimaryScreen::Keyboard),
         ('L', PrimaryScreen::LoopBrowser),
         ('g', PrimaryScreen::GridSequencer),
+        ('S', PrimaryScreen::DrumSequencer),
         ('C', PrimaryScreen::ChordChart),
         ('e', PrimaryScreen::GuitarArticulation),
     ] {
@@ -118,6 +119,7 @@ fn the_menu_lists_every_screen_including_the_chord_chart() {
         "[K] Keyboard",
         "[L] Loop Browser",
         "[G] Grid Sequencer",
+        "[S] Drum Sequencer",
         "[C] Chord Chart",
     ] {
         assert!(

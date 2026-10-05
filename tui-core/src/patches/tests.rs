@@ -314,6 +314,24 @@ fn catalog_plugin(base: String, dir: String) -> CatalogPlugin {
 }
 
 #[test]
+fn catalog_scan_announces_its_source_before_a_directory_error() {
+    let missing = std::env::temp_dir()
+        .join(format!("cmrt_missing_catalog_{}", std::process::id()))
+        .join("does-not-exist");
+    let dir = missing.to_string_lossy().into_owned();
+    let plugin = catalog_plugin(dir.clone(), dir.clone());
+    let mut announced = Vec::new();
+
+    let result = collect_patch_listing_from_catalog_with_progress(
+        std::slice::from_ref(&plugin),
+        |plugin, source| announced.push((plugin.name.clone(), source.map(str::to_string))),
+    );
+
+    assert!(result.is_err());
+    assert_eq!(announced, vec![(plugin.name, Some(dir))]);
+}
+
+#[test]
 fn patch_stem_drops_only_known_patch_file_extensions() {
     assert_eq!(
         patch_stem("patches_3rdparty/Dan Maurer/Winds/Reed To Pipe Morph.fxp"),
