@@ -265,7 +265,7 @@ fn run() -> Result<()> {
         &cfg,
         cmrt_offline_render::EffectPlugins::discover(),
         startup_keyboard,
-    );
+    )?;
 
     let exit_reason = app.run()?;
     drop(app);

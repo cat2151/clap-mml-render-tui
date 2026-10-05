@@ -28,12 +28,10 @@ pub(super) struct LoadedSessionState {
     pub(super) mml_overlay_play_settings: crate::history::MmlOverlayPlaySettings,
 }
 
-pub(super) fn load_initial_session_state() -> LoadedSessionState {
-    // `lines` は常に1行以上を保持する（不変条件）。
-    // load_session_state() は lines が空でないことを保証している。
+pub(super) fn load_initial_session_state() -> anyhow::Result<LoadedSessionState> {
+    let crate::history::NotepadDocument { cursor, lines } =
+        crate::history::load_notepad_document()?;
     let crate::history::SessionState {
-        cursor,
-        lines,
         active_screen,
         keyboard,
         grid_sequencer_track_count,
@@ -53,9 +51,9 @@ pub(super) fn load_initial_session_state() -> LoadedSessionState {
         chord_chart_bass_query,
         chord_chart_effect_chain,
         mml_overlay_play_settings,
-    } = crate::history::load_session_state();
+    } = crate::history::load_session_state()?;
     let initial_cursor = super::clamp_session_cursor(cursor, lines.len());
-    LoadedSessionState {
+    Ok(LoadedSessionState {
         cursor: initial_cursor,
         lines,
         active_screen,
@@ -77,7 +75,7 @@ pub(super) fn load_initial_session_state() -> LoadedSessionState {
         chord_chart_bass_query,
         chord_chart_effect_chain,
         mml_overlay_play_settings,
-    }
+    })
 }
 
 /// 起動引数で keyboard の状態が指定されていれば、保存済みの keyboard 状態をそれで置き換え、

@@ -58,6 +58,10 @@ pub(crate) fn session_state_path() -> Option<PathBuf> {
     history_file_path("history.json")
 }
 
+pub(crate) fn notepad_document_path() -> Option<PathBuf> {
+    history_file_path("notepad.json")
+}
+
 pub(crate) fn daw_session_state_path() -> Option<PathBuf> {
     history_file_path("history_daw.json")
 }

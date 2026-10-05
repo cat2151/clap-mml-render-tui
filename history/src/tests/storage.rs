@@ -130,7 +130,7 @@ fn load_session_state_normalizes_keyboard_restore_values() {
     )
     .unwrap();
 
-    let state = load_session_state();
+    let state = load_session_state().unwrap();
     assert_eq!(state.active_screen, PrimaryScreen::Keyboard);
     assert_eq!(
         state.keyboard,
@@ -164,7 +164,7 @@ fn session_state_round_trips_the_grid_sequencer_chord_mode() {
     })
     .unwrap();
 
-    assert!(load_session_state().grid_sequencer_chord_mode);
+    assert!(load_session_state().unwrap().grid_sequencer_chord_mode);
 
     std::fs::remove_dir_all(&tmp).ok();
 }
@@ -181,7 +181,7 @@ fn session_state_round_trips_independent_manual_bpms() {
     })
     .unwrap();
 
-    let loaded = load_session_state();
+    let loaded = load_session_state().unwrap();
     assert_eq!(loaded.grid_sequencer_bpm, Some(128.123456789));
     assert_eq!(loaded.loop_browser_bpm, Some(91.75));
 
@@ -209,7 +209,7 @@ fn session_state_round_trips_independent_automatic_bpm_ranges() {
     })
     .unwrap();
 
-    let loaded = load_session_state();
+    let loaded = load_session_state().unwrap();
     assert_eq!(loaded.grid_sequencer_bpm_range, Some([80.0, 160.0]));
     assert_eq!(loaded.loop_browser_bpm_range, Some([90.0, 140.0]));
 
@@ -264,7 +264,7 @@ fn session_state_round_trips_the_editable_grid() {
     })
     .unwrap();
 
-    assert_eq!(load_session_state().grid_sequencer, Some(grid));
+    assert_eq!(load_session_state().unwrap().grid_sequencer, Some(grid));
 
     std::fs::remove_dir_all(&tmp).ok();
 }
@@ -287,7 +287,7 @@ fn load_session_state_normalizes_grid_sequencer_track_count() {
     .unwrap();
 
     // 3 は chord mode 用に足したので通る。5 のような未対応値だけが既定へ落ちる。
-    assert_eq!(load_session_state().grid_sequencer_track_count, 16);
+    assert_eq!(load_session_state().unwrap().grid_sequencer_track_count, 16);
 
     std::fs::remove_dir_all(&tmp).ok();
 }

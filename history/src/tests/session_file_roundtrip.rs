@@ -7,8 +7,6 @@ fn save_and_load_session_state_roundtrip() {
     let tmp_path = crate::test_support::unique_test_dir("history_roundtrip_json");
 
     let state = SessionState {
-        cursor: 7,
-        lines: vec!["cde".to_string(), "fga".to_string()],
         active_screen: PrimaryScreen::Notepad,
         keyboard: KeyboardSessionState::default(),
         grid_sequencer_track_count: 16,
@@ -36,8 +34,6 @@ fn save_and_load_session_state_roundtrip() {
     let loaded: SessionState = serde_json::from_str(&read_back).unwrap();
     std::fs::remove_file(&tmp_path).ok();
 
-    assert_eq!(loaded.cursor, 7);
-    assert_eq!(loaded.lines, vec!["cde".to_string(), "fga".to_string()]);
     assert_eq!(loaded.active_screen, PrimaryScreen::Notepad);
 }
 
@@ -47,8 +43,6 @@ fn save_and_load_session_state_roundtrip_daw_mode() {
     let tmp_path = crate::test_support::unique_test_dir("history_roundtrip_daw_json");
 
     let state = SessionState {
-        cursor: 0,
-        lines: vec!["cde".to_string()],
         active_screen: PrimaryScreen::Daw,
         keyboard: KeyboardSessionState::default(),
         grid_sequencer_track_count: 16,

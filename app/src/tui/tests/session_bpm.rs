@@ -24,12 +24,12 @@ fn screen_bpm_modes_are_persisted_and_restored_independently() {
 
     app.save_history_state();
 
-    let saved = crate::history::load_session_state();
+    let saved = crate::history::load_session_state().unwrap();
     assert_eq!(saved.grid_sequencer_bpm, Some(127.125));
     assert_eq!(saved.loop_browser_bpm, Some(93.75));
 
     let cfg = test_config();
-    let restored = TuiApp::new(&cfg, cmrt_offline_render::EffectPlugins::none());
+    let restored = TuiApp::new(&cfg, cmrt_offline_render::EffectPlugins::none()).unwrap();
     assert_eq!(
         restored.grid_sequencer.bpm_mode(),
         cmrt_tui_core::bpm::BpmMode::Manual(127.125)
@@ -66,12 +66,12 @@ fn screen_bpm_ranges_are_persisted_and_restored_independently() {
 
     app.save_history_state();
 
-    let saved = crate::history::load_session_state();
+    let saved = crate::history::load_session_state().unwrap();
     assert_eq!(saved.grid_sequencer_bpm_range, Some([80.0, 160.0]));
     assert_eq!(saved.loop_browser_bpm_range, Some([90.0, 140.0]));
 
     let cfg = test_config();
-    let restored = TuiApp::new(&cfg, cmrt_offline_render::EffectPlugins::none());
+    let restored = TuiApp::new(&cfg, cmrt_offline_render::EffectPlugins::none()).unwrap();
     assert_eq!(restored.grid_sequencer.bpm_range(), grid_range);
     assert_eq!(restored.loop_browser.state.bpm_range(), loop_range);
     // 引いた BPM は保存しない。起動時に範囲から引き直す。
@@ -100,7 +100,7 @@ fn the_default_bpm_ranges_are_not_written_to_the_session() {
     let app = TuiApp::new_for_test(test_config());
     app.save_history_state();
 
-    let saved = crate::history::load_session_state();
+    let saved = crate::history::load_session_state().unwrap();
     assert_eq!(saved.grid_sequencer_bpm_range, None);
     assert_eq!(saved.loop_browser_bpm_range, None);
 

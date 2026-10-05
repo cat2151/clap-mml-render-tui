@@ -296,11 +296,11 @@ fn history_round_trip_restores_the_two_canonical_patches_independently() {
     app.save_history_state();
     drop(app);
 
-    let saved = crate::history::load_session_state();
+    let saved = crate::history::load_session_state().unwrap();
     assert_eq!(saved.mml_overlay_patch.as_deref(), Some("Global/Pad.fxp"));
     assert_eq!(saved.chord_chart_patch.as_deref(), Some("Keys/Piano.fxp"));
 
-    let restored = TuiApp::new(&cfg, cmrt_offline_render::EffectPlugins::none());
+    let restored = TuiApp::new(&cfg, cmrt_offline_render::EffectPlugins::none()).unwrap();
     assert_eq!(
         restored.mml_overlay_patch.as_deref(),
         Some("Global/Pad.fxp")

@@ -54,42 +54,6 @@ fn load_daw_session_state_migrates_from_history_json() {
 }
 
 #[test]
-fn load_session_state_migrates_from_legacy_data_local_history_json() {
-    let tmp = crate::test_support::unique_test_dir("legacy_history_json_migrate");
-    let _env_guards = crate::test_support::set_local_dir_envs(&tmp);
-
-    let legacy_path = crate::test_support::legacy_session_state_path_for_test().unwrap();
-    std::fs::create_dir_all(legacy_path.parent().unwrap()).unwrap();
-    std::fs::write(
-        &legacy_path,
-        r#"{
-  "cursor": 9,
-  "lines": ["abc", "def"],
-  "is_daw_mode": true
-}"#,
-    )
-    .unwrap();
-
-    let state = load_session_state();
-    assert_eq!(state.cursor, 9);
-    assert_eq!(state.lines, vec!["abc".to_string(), "def".to_string()]);
-    assert_eq!(state.active_screen, PrimaryScreen::Daw);
-
-    let new_path = super::session_state_path().unwrap();
-    assert!(
-        new_path.exists(),
-        "migrated history.json が新配置に存在しない"
-    );
-    let migrated: SessionState =
-        serde_json::from_str(&std::fs::read_to_string(&new_path).unwrap()).unwrap();
-    assert_eq!(migrated.cursor, 9);
-    assert_eq!(migrated.lines, vec!["abc".to_string(), "def".to_string()]);
-    assert_eq!(migrated.active_screen, PrimaryScreen::Daw);
-
-    std::fs::remove_dir_all(&tmp).ok();
-}
-
-#[test]
 fn load_daw_session_state_migrates_from_legacy_history_daw_json() {
     let tmp = crate::test_support::unique_test_dir("legacy_history_daw_json_migrate");
     let _env_guards = crate::test_support::set_local_dir_envs(&tmp);

@@ -79,9 +79,14 @@ fn save_history_state_persists_tui_cursor_lines_and_active_screen() {
         "expected isolated history file to be created at {}",
         history_path.display()
     );
-    let saved = crate::history::load_session_state();
-    assert_eq!(saved.cursor, 2);
-    assert_eq!(saved.lines, app.notepad.session_lines());
+    let saved = crate::history::load_session_state().unwrap();
+    let document = crate::history::load_notepad_document().unwrap();
+    assert_eq!(document.cursor, 2);
+    assert_eq!(document.lines, app.notepad.session_lines());
+    let session_json: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&history_path).unwrap()).unwrap();
+    assert!(session_json.get("lines").is_none());
+    assert!(session_json.get("cursor").is_none());
     assert_eq!(saved.active_screen, crate::history::PrimaryScreen::Daw);
     assert_eq!(
         saved.keyboard_note_guide_overlay_date.as_deref(),
@@ -127,7 +132,7 @@ fn the_mml_overlay_play_settings_survive_a_restart() {
     app.save_history_state();
     drop(app);
 
-    let saved = crate::history::load_session_state();
+    let saved = crate::history::load_session_state().unwrap();
     assert_eq!(
         saved.mml_overlay_play_settings,
         crate::history::MmlOverlayPlaySettings {
@@ -137,7 +142,7 @@ fn the_mml_overlay_play_settings_survive_a_restart() {
         }
     );
 
-    let restarted = TuiApp::new(&cfg, cmrt_offline_render::EffectPlugins::none());
+    let restarted = TuiApp::new(&cfg, cmrt_offline_render::EffectPlugins::none()).unwrap();
     assert_eq!(restarted.mml_overlay.play_settings(), confirmed);
 
     std::fs::remove_dir_all(&tmp).ok();
@@ -167,7 +172,7 @@ fn keyboard_q_persists_and_restores_patch_and_buffer() {
     assert!(matches!(action, crate::tui::keyboard::KeyboardAction::Quit));
     app.save_history_state();
 
-    let saved = crate::history::load_session_state();
+    let saved = crate::history::load_session_state().unwrap();
     assert_eq!(saved.active_screen, crate::history::PrimaryScreen::Keyboard);
     assert_eq!(
         saved.keyboard,
@@ -179,7 +184,7 @@ fn keyboard_q_persists_and_restores_patch_and_buffer() {
     );
 
     let cfg = test_config();
-    let mut restored = TuiApp::new(&cfg, cmrt_offline_render::EffectPlugins::none());
+    let mut restored = TuiApp::new(&cfg, cmrt_offline_render::EffectPlugins::none()).unwrap();
     assert_eq!(
         restored.active_screen,
         crate::screen_switch::PrimaryScreen::Keyboard
@@ -195,7 +200,7 @@ fn keyboard_q_persists_and_restores_patch_and_buffer() {
         crossterm::event::KeyModifiers::NONE,
     ));
     restored.save_history_state();
-    let saved = crate::history::load_session_state();
+    let saved = crate::history::load_session_state().unwrap();
     assert_eq!(saved.active_screen, crate::history::PrimaryScreen::Notepad);
     assert_eq!(
         saved.keyboard.patch.as_deref(),
@@ -228,11 +233,11 @@ fn grid_track_count_is_persisted_and_restored() {
     ));
     app.save_history_state();
 
-    let saved = crate::history::load_session_state();
+    let saved = crate::history::load_session_state().unwrap();
     assert_eq!(saved.grid_sequencer_track_count, 1);
 
     let cfg = test_config();
-    let restored = TuiApp::new(&cfg, cmrt_offline_render::EffectPlugins::none());
+    let restored = TuiApp::new(&cfg, cmrt_offline_render::EffectPlugins::none()).unwrap();
     assert_eq!(restored.grid_sequencer.track_count(), 1);
 
     std::fs::remove_dir_all(&tmp).ok();
@@ -312,7 +317,7 @@ fn edited_grid_is_persisted_and_restored_without_persisting_derived_note() {
     assert!(!json.contains("\"duration\""));
     assert!(!json.contains("\"cells\""));
     let cfg = test_config();
-    let restored = TuiApp::new(&cfg, cmrt_offline_render::EffectPlugins::none());
+    let restored = TuiApp::new(&cfg, cmrt_offline_render::EffectPlugins::none()).unwrap();
     let session = restored.grid_sequencer.session_state().unwrap();
     assert_eq!(
         session.cycle_random,
@@ -358,14 +363,14 @@ fn loop_browser_screen_is_saved_and_restored_as_the_startup_screen() {
     app.stop_loop_browser();
     app.save_history_state();
 
-    let saved = crate::history::load_session_state();
+    let saved = crate::history::load_session_state().unwrap();
     assert_eq!(
         saved.active_screen,
         crate::history::PrimaryScreen::LoopBrowser
     );
 
     let cfg = test_config();
-    let restored = TuiApp::new(&cfg, cmrt_offline_render::EffectPlugins::none());
+    let restored = TuiApp::new(&cfg, cmrt_offline_render::EffectPlugins::none()).unwrap();
     assert_eq!(
         restored.active_screen,
         crate::history::PrimaryScreen::LoopBrowser

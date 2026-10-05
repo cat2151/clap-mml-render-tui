@@ -37,18 +37,6 @@ fn assert_history_file_path(path: &Path, file_name: &str) {
 }
 
 #[test]
-fn session_state_default_cursor_is_zero() {
-    let state = SessionState::default();
-    assert_eq!(state.cursor, 0);
-}
-
-#[test]
-fn session_state_default_lines_is_cde() {
-    let state = SessionState::default();
-    assert_eq!(state.lines, vec!["cde".to_string()]);
-}
-
-#[test]
 fn session_state_default_screen_is_notepad() {
     let state = SessionState::default();
     assert_eq!(state.active_screen, PrimaryScreen::Notepad);
@@ -88,8 +76,6 @@ fn keyboard_session_defaults_to_x4() {
 #[test]
 fn session_state_serialize_deserialize() {
     let state = SessionState {
-        cursor: 42,
-        lines: vec!["abc".to_string(), "def".to_string()],
         active_screen: PrimaryScreen::Notepad,
         keyboard: KeyboardSessionState::default(),
         grid_sequencer_track_count: 16,
@@ -116,8 +102,6 @@ fn session_state_serialize_deserialize() {
     };
     let json = serde_json::to_string_pretty(&state).unwrap();
     let loaded: SessionState = serde_json::from_str(&json).unwrap();
-    assert_eq!(loaded.cursor, 42);
-    assert_eq!(loaded.lines, vec!["abc".to_string(), "def".to_string()]);
     assert_eq!(loaded.active_screen, PrimaryScreen::Notepad);
     assert_eq!(
         loaded.keyboard_note_guide_overlay_date.as_deref(),
@@ -150,8 +134,6 @@ fn session_state_serialize_deserialize() {
 #[test]
 fn session_state_serialize_deserialize_zero() {
     let state = SessionState {
-        cursor: 0,
-        lines: vec!["cde".to_string()],
         active_screen: PrimaryScreen::Notepad,
         keyboard: KeyboardSessionState::default(),
         grid_sequencer_track_count: 16,
@@ -174,8 +156,6 @@ fn session_state_serialize_deserialize_zero() {
     };
     let json = serde_json::to_string_pretty(&state).unwrap();
     let loaded: SessionState = serde_json::from_str(&json).unwrap();
-    assert_eq!(loaded.cursor, 0);
-    assert_eq!(loaded.lines, vec!["cde".to_string()]);
     assert_eq!(loaded.active_screen, PrimaryScreen::Notepad);
 }
 
@@ -230,8 +210,6 @@ fn history_without_chord_chart_patch_keeps_existing_patch_and_defaults_to_none()
 #[test]
 fn session_state_serialize_deserialize_daw_screen() {
     let state = SessionState {
-        cursor: 1,
-        lines: vec!["cde".to_string()],
         active_screen: PrimaryScreen::Daw,
         keyboard: KeyboardSessionState::default(),
         grid_sequencer_track_count: 16,
@@ -254,40 +232,19 @@ fn session_state_serialize_deserialize_daw_screen() {
     };
     let json = serde_json::to_string_pretty(&state).unwrap();
     let loaded: SessionState = serde_json::from_str(&json).unwrap();
-    assert_eq!(loaded.cursor, 1);
     assert_eq!(loaded.active_screen, PrimaryScreen::Daw);
 }
 
 #[test]
-fn session_state_json_from_invalid_returns_default() {
-    // 不正なJSONはデフォルト値を返す
-    let result: SessionState = serde_json::from_str("not json").unwrap_or_default();
-    assert_eq!(result.cursor, 0);
-    assert_eq!(result.lines, vec!["cde".to_string()]);
-    assert_eq!(result.active_screen, PrimaryScreen::Notepad);
-}
-
-#[test]
 fn session_state_json_missing_field_returns_default() {
-    // cursor フィールドがない場合はデフォルト値を返す
-    let result: SessionState = serde_json::from_str("{}").unwrap_or_default();
-    assert_eq!(result.cursor, 0);
-    assert_eq!(result.lines, vec!["cde".to_string()]);
+    // 設定が未指定なら既定値を使う
+    let result: SessionState = serde_json::from_str("{}").unwrap();
     assert_eq!(result.active_screen, PrimaryScreen::Notepad);
-}
-
-#[test]
-fn session_state_json_missing_lines_uses_default() {
-    // lines フィールドがない場合（旧形式の history.json）はデフォルト値 ["cde"] を返す
-    let result: SessionState = serde_json::from_str(r#"{"cursor": 3}"#).unwrap();
-    assert_eq!(result.cursor, 3);
-    assert_eq!(result.lines, vec!["cde".to_string()]);
 }
 
 #[test]
 fn session_state_json_missing_screen_defaults_to_notepad() {
     let result: SessionState = serde_json::from_str(r#"{"cursor": 3, "lines": ["cde"]}"#).unwrap();
-    assert_eq!(result.cursor, 3);
     assert_eq!(result.active_screen, PrimaryScreen::Notepad);
 }
 
@@ -326,12 +283,4 @@ fn legacy_keyboard_takes_precedence_over_legacy_daw_flag() {
     )
     .unwrap();
     assert_eq!(result.active_screen, PrimaryScreen::Keyboard);
-}
-
-#[test]
-fn session_state_json_empty_lines_passes_through_serde() {
-    // serde は "lines": [] を空配列のままデシリアライズする（serde デフォルトは適用されない）。
-    // load_session_state() がこれを検知して default_lines() で補填する。
-    let raw: SessionState = serde_json::from_str(r#"{"cursor": 2, "lines": []}"#).unwrap();
-    assert!(raw.lines.is_empty(), "serde は空配列をそのまま通す");
 }

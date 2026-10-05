@@ -16,10 +16,10 @@ fn daily_daw_is_saved_and_restored_as_the_cold_start_screen() {
     app.save_history_state();
     drop(app);
 
-    let saved = crate::history::load_session_state();
+    let saved = crate::history::load_session_state().unwrap();
     assert_eq!(saved.active_screen, crate::history::PrimaryScreen::DailyDaw);
     let cfg = crate::tui::tests::test_config();
-    let restored = TuiApp::new(&cfg, cmrt_offline_render::EffectPlugins::none());
+    let restored = TuiApp::new(&cfg, cmrt_offline_render::EffectPlugins::none()).unwrap();
     assert_eq!(
         restored.active_screen,
         crate::screen_switch::PrimaryScreen::DailyDaw
@@ -53,7 +53,7 @@ fn drum_sequencer_restores_only_active_screen_with_empty_silent_matrix() {
     assert!(app.drum_sequencer.screen.cell_on(36, 0));
     app.save_history_state();
     drop(app);
-    let saved = crate::history::load_session_state();
+    let saved = crate::history::load_session_state().unwrap();
     assert_eq!(
         saved.active_screen,
         crate::history::PrimaryScreen::DrumSequencer
@@ -65,7 +65,7 @@ fn drum_sequencer_restores_only_active_screen_with_empty_silent_matrix() {
         "phrase has no session field"
     );
     let cfg = crate::tui::tests::test_config();
-    let restored = TuiApp::new(&cfg, cmrt_offline_render::EffectPlugins::none());
+    let restored = TuiApp::new(&cfg, cmrt_offline_render::EffectPlugins::none()).unwrap();
     assert_eq!(
         restored.active_screen,
         crate::screen_switch::PrimaryScreen::DrumSequencer

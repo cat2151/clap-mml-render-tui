@@ -1,7 +1,7 @@
-//! history.json によるセッション状態の保存・復元。
+//! notepad 本文とセッション状態の保存・復元。
 //!
-//! voicevox-playground-tui に倣い、終了時に現在行番号と編集行を保存し、
-//! 起動時に復元する。notepad / DAW / keyboard の各画面から共有されるため、
+//! 本文は notepad.json、画面・演奏設定は history.json に保存する。
+//! notepad / DAW / keyboard の各画面から共有されるため、
 //! app からは独立した crate として切り出してある。
 //!
 //! テスト時のディレクトリ差し替えは `test-support` feature で有効になる
@@ -14,6 +14,7 @@ mod daw;
 mod grid_sequencer_session;
 mod helpers;
 mod mml_patch_filter_presets;
+mod notepad_document;
 mod patch_phrase_store;
 mod paths;
 mod session_state;
@@ -36,6 +37,7 @@ pub use grid_sequencer_session::{
     GridSequencerSessionState,
 };
 pub use mml_patch_filter_presets::{load_mml_patch_filter_presets, save_mml_patch_filter_presets};
+pub use notepad_document::{load_notepad_document, save_notepad_document, NotepadDocument};
 pub use patch_phrase_store::{
     favorite_patch_names, load_patch_phrase_store,
     normalize_patch_phrase_store_for_available_patches, rename_patch_phrase_store_key,

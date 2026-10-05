@@ -32,7 +32,7 @@ fn a_material_added_in_the_overlay_is_saved_and_restored_on_the_next_start() {
     drop(app);
 
     let cfg = test_config();
-    let restarted = TuiApp::new(&cfg, cmrt_offline_render::EffectPlugins::none());
+    let restarted = TuiApp::new(&cfg, cmrt_offline_render::EffectPlugins::none()).unwrap();
     assert_eq!(restarted.guitar_articulation.arp_materials(), ["Am7"]);
 
     std::fs::remove_dir_all(&tmp).ok();
@@ -72,7 +72,7 @@ fn the_overlay_material_and_arp_are_saved_and_the_next_start_opens_with_them() {
     drop(app);
 
     let cfg = test_config();
-    let mut restarted = TuiApp::new(&cfg, cmrt_offline_render::EffectPlugins::none());
+    let mut restarted = TuiApp::new(&cfg, cmrt_offline_render::EffectPlugins::none()).unwrap();
     restarted.switch_to_primary_screen(PrimaryScreen::GuitarArticulation, None);
     for code in [KeyCode::Esc, KeyCode::Char('z')] {
         restarted.handle_guitar_articulation_key_event(plain(code));
@@ -110,7 +110,7 @@ fn a_row_rule_changed_in_the_overlay_is_saved_on_close_and_restored_on_the_next_
     drop(app);
 
     let cfg = test_config();
-    let restarted = TuiApp::new(&cfg, cmrt_offline_render::EffectPlugins::none());
+    let restarted = TuiApp::new(&cfg, cmrt_offline_render::EffectPlugins::none()).unwrap();
     assert_eq!(*restarted.guitar_articulation.rules(), rules);
 
     std::fs::remove_dir_all(&tmp).ok();

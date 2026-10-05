@@ -24,9 +24,11 @@ fn play_settings_to_history(
 
 impl TuiApp<'_> {
     pub(in crate::tui) fn save_history_state(&self) {
-        let _ = crate::history::save_session_state(&crate::history::SessionState {
+        let _ = crate::history::save_notepad_document(&crate::history::NotepadDocument {
             cursor: self.notepad.session_cursor(),
             lines: self.notepad.session_lines().to_vec(),
+        });
+        let _ = crate::history::save_session_state(&crate::history::SessionState {
             active_screen: self.active_screen,
             keyboard: self.keyboard.session_state(),
             grid_sequencer_track_count: self.grid_sequencer.track_count(),

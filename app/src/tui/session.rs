@@ -130,7 +130,7 @@ fn spawn_play_server_prewarm(
 }
 
 impl<'a> TuiApp<'a> {
-    pub fn new(cfg: &'a Config, effect_plugins: EffectPlugins) -> Self {
+    pub fn new(cfg: &'a Config, effect_plugins: EffectPlugins) -> anyhow::Result<Self> {
         Self::with_startup_keyboard(cfg, effect_plugins, None)
     }
 
@@ -140,7 +140,7 @@ impl<'a> TuiApp<'a> {
         cfg: &'a Config,
         effect_plugins: EffectPlugins,
         startup_keyboard: Option<crate::history::KeyboardSessionState>,
-    ) -> Self {
+    ) -> anyhow::Result<Self> {
         let cfg_arc = Arc::new(cfg.clone());
         let LoadedSessionState {
             cursor,
@@ -164,7 +164,7 @@ impl<'a> TuiApp<'a> {
             chord_chart_bass_query,
             chord_chart_effect_chain,
             mml_overlay_play_settings,
-        } = load_initial_session_state();
+        } = load_initial_session_state()?;
         apply_startup_keyboard(&mut active_screen, &mut keyboard, startup_keyboard);
         let play_server = Arc::new(
             crate::realtime_play::RealtimePlayServerSupervisor::with_live_instance_count(
@@ -228,7 +228,7 @@ impl<'a> TuiApp<'a> {
         let guitar_settings = super::guitar_articulation::load_settings();
         let keyboard_effect_plugins = effect_plugins.clone();
 
-        Self {
+        Ok(Self {
             active_screen,
             screen_switch_menu: crate::screen_switch::ScreenSwitchMenu::default(),
             cfg: Arc::clone(&cfg_arc),
@@ -354,7 +354,7 @@ impl<'a> TuiApp<'a> {
             // まだ何も鳴らそうとしていないので待ってもいない。
             sound_startup_wait: None,
             reported_sound_prepare_error: None,
-        }
+        })
     }
 }
 

@@ -50,7 +50,9 @@ fn adding_one_stage_and_committing_puts_it_on_the_next_section_playback() {
         LivePatch::with_effect_chain(Some(DEXED_SNARE), &chain(&stages))
     );
     assert_eq!(
-        crate::history::load_session_state().chord_chart_effect_chain,
+        crate::history::load_session_state()
+            .unwrap()
+            .chord_chart_effect_chain,
         stages
     );
 }

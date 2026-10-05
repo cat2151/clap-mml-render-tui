@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde::Deserialize;
 
 // keyboard 画面のセッション状態は `cmrt-tui-core` が所有する。
@@ -25,12 +25,6 @@ pub struct MmlOverlayPlaySettings {
 /// 起動・終了で保存・復元するセッション状態。
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct SessionState {
-    /// 現在行番号（0始まり）。
-    #[serde(default)]
-    pub cursor: usize,
-    /// 編集行リスト。
-    #[serde(default = "super::helpers::default_lines")]
-    pub lines: Vec<String>,
     /// 終了時に表示していた主要画面。起動時に直接復元する。
     pub active_screen: cmrt_tui_core::screen_switch::PrimaryScreen,
     /// 最後に使用した keyboard 状態。表示画面とは独立して保持する。
@@ -95,8 +89,6 @@ pub struct SessionState {
 impl Default for SessionState {
     fn default() -> Self {
         Self {
-            cursor: 0,
-            lines: super::helpers::default_lines(),
             active_screen: cmrt_tui_core::screen_switch::PrimaryScreen::Notepad,
             keyboard: KeyboardSessionState::default(),
             grid_sequencer_track_count: cmrt_realtime_play::DEFAULT_LIVE_INSTANCE_COUNT,
@@ -122,10 +114,6 @@ impl Default for SessionState {
 
 #[derive(serde::Deserialize)]
 struct SessionStateWire {
-    #[serde(default)]
-    cursor: usize,
-    #[serde(default = "super::helpers::default_lines")]
-    lines: Vec<String>,
     #[serde(default)]
     active_screen: Option<cmrt_tui_core::screen_switch::PrimaryScreen>,
     #[serde(default)]
@@ -184,8 +172,6 @@ impl<'de> serde::Deserialize<'de> for SessionState {
             }
         });
         Ok(Self {
-            cursor: wire.cursor,
-            lines: wire.lines,
             active_screen,
             keyboard: wire.keyboard.unwrap_or_default(),
             grid_sequencer_track_count: cmrt_realtime_play::normalize_live_instance_count(
@@ -239,19 +225,10 @@ where
     Ok(serde_json::from_value(value).ok())
 }
 
-/// セッション状態（現在行番号）を history.json に保存する。
-/// データディレクトリが利用できない場合はベストエフォートでスキップする。
+/// 画面・演奏設定を history.json に保存する。notepad 本文は含まない。
 pub fn save_session_state(state: &SessionState) -> Result<()> {
-    let _ = super::paths::migrate_legacy_history_file("history.json");
-    let Some(path) = super::paths::session_state_path() else {
-        return Ok(());
-    };
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir)?;
-    }
-    let json = serde_json::to_string_pretty(state)?;
-    std::fs::write(&path, json)?;
-    Ok(())
+    let path = super::paths::session_state_path().context("セッションの保存先を取得できません")?;
+    super::helpers::write_json(&path, state)
 }
 
 /// keyboard の音出し確認 overlay の表示日だけを即時保存する。
@@ -259,37 +236,26 @@ pub fn save_session_state(state: &SessionState) -> Result<()> {
 /// 実行中の未保存編集や、復元用 keyboard 状態を意図せず上書きしないよう、
 /// ディスク上のセッション状態へ日付だけをマージする。
 pub fn save_keyboard_note_guide_overlay_date(local_date: &str) -> Result<()> {
-    let mut state = load_session_state();
+    let mut state = load_session_state()?;
     state.keyboard_note_guide_overlay_date = Some(local_date.to_owned());
     save_session_state(&state)
 }
 
 /// notepad の音出し確認 overlay の表示日だけを即時保存する。
 pub fn save_notepad_sound_check_guide_overlay_date(local_date: &str) -> Result<()> {
-    let mut state = load_session_state();
+    let mut state = load_session_state()?;
     state.notepad_sound_check_guide_overlay_date = Some(local_date.to_owned());
     save_session_state(&state)
 }
 
 /// history.json からセッション状態を読み込む。
-/// ファイルが存在しない場合・データディレクトリが利用できない場合・読み込みに失敗した場合は
-/// デフォルト値を返す。
-/// `lines` が空の場合（`"lines": []` のような入力）はデフォルト値で補填し、
-/// `lines` が常に1行以上という不変条件を保証する。
-pub fn load_session_state() -> SessionState {
-    let Some(path) = super::paths::resolved_history_file_path("history.json") else {
-        return SessionState::default();
-    };
-    if !path.exists() {
-        return SessionState::default();
-    }
-    let mut state: SessionState = std::fs::read_to_string(&path)
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default();
-    if state.lines.is_empty() {
-        state.lines = super::helpers::default_lines();
-    }
+/// 未作成の場合だけ既定値を返す。既存ファイルの読み込み失敗は呼び出し元へ返す。
+pub fn load_session_state() -> Result<SessionState> {
+    let path = super::paths::session_state_path().context("セッションの保存先を取得できません")?;
+    let mut state: SessionState = super::helpers::read_json_or_default(&path)?;
     state.keyboard.normalize();
-    state
+    Ok(state)
 }
+
+#[cfg(test)]
+mod tests;

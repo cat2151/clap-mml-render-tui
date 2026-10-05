@@ -31,14 +31,14 @@ fn bass_preview_settings_survive_a_restart_independently() {
     app.save_history_state();
     drop(app);
 
-    let saved = crate::history::load_session_state();
+    let saved = crate::history::load_session_state().unwrap();
     assert!(!saved.chord_chart_bass_enabled);
     assert_eq!(
         saved.chord_chart_bass_patch.as_deref(),
         Some("Bass/Finger Bass.fxp")
     );
 
-    let restored = TuiApp::new(&cfg, cmrt_offline_render::EffectPlugins::none());
+    let restored = TuiApp::new(&cfg, cmrt_offline_render::EffectPlugins::none()).unwrap();
     assert!(!restored.chord_chart.bass_enabled());
     assert_eq!(
         restored.chord_chart_bass_patch.as_deref(),
@@ -69,6 +69,10 @@ fn bass_toggle_persists_immediately_as_a_preview_setting() {
         crate::tui::chord_chart::ChordChartAction::PreviewSettingChanged
     );
 
-    assert!(!crate::history::load_session_state().chord_chart_bass_enabled);
+    assert!(
+        !crate::history::load_session_state()
+            .unwrap()
+            .chord_chart_bass_enabled
+    );
     std::fs::remove_dir_all(&tmp).ok();
 }
