@@ -43,3 +43,4 @@ The setup script installs the Linux packages needed for this workspace's `rodio`
   - いずれも人間が動作確認する用（debugビルドだと音が途切れて「バグか？」となったのでリリースビルドで動作確認する）
 - もしcatalog再構築を人間に依頼しようとしたら、かわりに自分でやること
 - プルリクエストは日本語で書くこと
+- 調査時にtempにディレクトリやファイルを作成した場合は放置せず、scripts/cleanup_test_temp_dirs.py で掃除すること

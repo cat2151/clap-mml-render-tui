@@ -11,6 +11,9 @@ mod layout;
 mod naming;
 mod roles;
 
+/// Host-independent Surge XT CLAP state preparation shared with play-server.
+pub use clap_mml_play_server_core::{prepare_clap_patch_state, PatchStateError};
+
 pub use grouping::{
     group_patch_pairs_by_category, sort_patch_pairs, PatchCategory, PatchSortOrder,
 };
@@ -23,3 +26,6 @@ pub use roles::{
     builtin_role_presets, normalize_user_role_presets, plugin_slug, DrumPatchRole, PatchRole,
     PatchRoleIndex, PatchRoleInput, PatchRolePreset, PluginTerm,
 };
+
+#[cfg(test)]
+mod tests;
