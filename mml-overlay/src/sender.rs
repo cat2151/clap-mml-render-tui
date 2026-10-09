@@ -32,13 +32,14 @@ mod sink;
 mod sounding;
 mod sounding_lines;
 mod status;
+mod step_loop;
 mod voice;
+mod worker;
 
 use std::{
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
-        mpsc::{self, RecvTimeoutError},
-        Arc, Mutex,
+        mpsc, Arc, Mutex,
     },
     thread::JoinHandle,
     time::{Duration, Instant},
@@ -50,15 +51,15 @@ use crate::line_play::LineProgram;
 
 pub use layers::LineLayer;
 pub use live_patch::LivePatch;
-use prepare::{prepare_if_needed, prepare_line_if_needed};
-use queue::{drain_queue, WorkerMessage};
+use queue::WorkerMessage;
 #[cfg(any(test, feature = "test-support"))]
 pub use recording::{RecordingSink, SinkOperation};
 use sink::SoundSink;
 use sounding_lines::SoundingLines;
-use status::{begin_status, publish_line_playback, publish_preload};
 pub use status::{MmlOverlayLinePlayback, MmlOverlayPreload, MmlOverlaySenderStatus};
-use voice::{Voice, Wake};
+use step_loop::StepLoopEdit;
+pub use step_loop::{StepHit, StepLoop, StepShot};
+use worker::run_sender;
 
 /// オーバーレイが借りる音源インスタンス。
 pub(crate) const MML_OVERLAY_INSTANCE: u8 = 0;
@@ -81,6 +82,11 @@ enum SenderCommandKind {
         program: LineProgram,
         stop_before_prepare: bool,
     },
+    /// 鳴っているものを止めてから、周期を固定した打点ループを頭から回す。
+    PlayStepLoop {
+        patch: LivePatch,
+        step_loop: StepLoop,
+    },
     /// 複数 instance の one-shot を 1 本の timeline として鳴らす。
     PlayLayers {
         layers: Vec<LineLayer>,
@@ -99,6 +105,7 @@ impl SenderCommandKind {
             Self::Prepare { .. } => "prepare",
             Self::PlayNotes { .. } => "notes",
             Self::PlayLine { .. } => "line",
+            Self::PlayStepLoop { .. } => "step-loop",
             Self::PlayLayers { .. } => "layers",
             Self::Stop => "stop",
             Self::Supersede => "supersede",
@@ -217,6 +224,42 @@ impl MmlOverlaySender {
         })
     }
 
+    /// 鳴っているものを止め、周期を固定した打点ループを頭から回し始める。
+    ///
+    /// 打点が空でも止めずに時計を進める。回している間の打点は
+    /// [`Self::update_step_loop`] で差し替え、まだ積んでいない時刻から効く。
+    pub fn play_step_loop(&self, patch: impl Into<LivePatch>, step_loop: StepLoop) -> u64 {
+        self.enqueue(SenderCommandKind::PlayStepLoop {
+            patch: patch.into(),
+            step_loop,
+        })
+    }
+
+    /// 走っている打点ループの打点を差し替える。ループが無ければ何もしない。
+    ///
+    /// command ではないので、列で待っている操作を置き換えず、状態表示も変えない。
+    /// 差し替えより後に積まれた command があれば、そちらの内容が勝つ。
+    pub fn update_step_loop(&self, hits: Vec<StepHit>) {
+        self.edit_step_loop(StepLoopEdit::Hits(hits));
+    }
+
+    /// 走っている打点ループに、周回とは別の 1 打をいま鳴らす。ループが無ければ何もしない。
+    /// 同じ note の打点をすでに積んである時刻とは重ねない（[`StepShot`] の規則）。
+    pub fn shoot_step_loop(&self, shot: StepShot) {
+        self.edit_step_loop(StepLoopEdit::Shot(shot));
+    }
+
+    /// 走っている打点ループの [`StepLoop::horizon_seconds`] を替える。周回位置は変えない。
+    pub fn set_step_loop_horizon(&self, seconds: f64) {
+        self.edit_step_loop(StepLoopEdit::Horizon(seconds));
+    }
+
+    fn edit_step_loop(&self, edit: StepLoopEdit) {
+        if self.tx.send(WorkerMessage::StepLoop(edit)).is_err() {
+            log_error("action=mml-overlay-step-loop event=enqueue-error".to_string());
+        }
+    }
+
     /// 複数 instance の one-shot performance を、1 command / 1 timeline で鳴らす。
     /// 空で呼ぶと、鳴っているものを止めるだけになる。
     pub fn play_layers(&self, layers: Vec<LineLayer>) -> u64 {
@@ -276,170 +319,6 @@ pub(crate) use crate::log_line;
 
 pub(crate) fn log_error(message: String) {
     log_line(message);
-}
-
-fn run_sender<S: SoundSink + Send + Sync + 'static>(
-    rx: mpsc::Receiver<WorkerMessage>,
-    sink: Arc<S>,
-    sample_rate_hz: f64,
-    latest_command_id: Arc<AtomicU64>,
-    shutting_down: Arc<AtomicBool>,
-    status: Arc<Mutex<MmlOverlaySenderStatus>>,
-    sounding_lines: SoundingLines,
-) {
-    let mut voice = Voice::new(sample_rate_hz, sounding_lines, shutting_down);
-    loop {
-        let received = match voice.next_wake(Instant::now()) {
-            Some((wake, wait)) => match rx.recv_timeout(wait) {
-                Ok(command) => command,
-                // 待ちが切れた。次の操作は来ていないので、起きた理由のほうを片づける。
-                Err(RecvTimeoutError::Timeout) => {
-                    match wake {
-                        Wake::Gate => {
-                            log_line(format!(
-                                "action=mml-overlay-gate-expired command_id={}",
-                                status.lock().unwrap().command_id
-                            ));
-                            voice.stop(&*sink, "gate");
-                            status.lock().unwrap().sounding.clear();
-                        }
-                        // 継ぎ足しは止めない。ここで stop を通すと毎周継ぎ目が出る。
-                        Wake::Repeat => voice.pump_repeat(&*sink, Instant::now()),
-                        Wake::Preload => {
-                            voice.poll_preload(&*sink);
-                            publish_preload(&status, &voice);
-                        }
-                    }
-                    continue;
-                }
-                Err(RecvTimeoutError::Disconnected) => break,
-            },
-            None => match rx.recv() {
-                Ok(command) => command,
-                Err(_) => break,
-            },
-        };
-        let (command, preloads) = drain_queue(received, &rx);
-        voice.poll_preload(&*sink);
-        let Some(command) = command else {
-            request_preloads(&mut voice, &*sink, &status, preloads);
-            continue;
-        };
-        let name = command.kind.name();
-        let queue_ms = command.queued_at.elapsed().as_millis();
-        let started_at = Instant::now();
-        log_line(format!(
-            "action=mml-overlay-command event=start command_id={} command={name} queue_ms={queue_ms}",
-            command.id
-        ));
-        voice.begin_command(command.id);
-        let shutdown = matches!(&command.kind, SenderCommandKind::Shutdown);
-        begin_status(&status, command.id);
-        match command.kind {
-            SenderCommandKind::Prepare { patch } => {
-                // 同じ patch が既に ready でも、prepare は「音源を明け渡して準備する」
-                // 操作なので、前の line playback は必ず止める。直前の Stop command は
-                // newest_queued_command でこの Prepare に畳み込まれうるため、ここ自身が
-                // stop の意味を持つ必要がある。
-                voice.stop(&*sink, "prepare");
-                prepare_if_needed(&mut voice, &*sink, &status, MML_OVERLAY_INSTANCE, &patch);
-            }
-            SenderCommandKind::PlayNotes {
-                patch,
-                messages,
-                gate,
-            } => {
-                let ready =
-                    prepare_if_needed(&mut voice, &*sink, &status, MML_OVERLAY_INSTANCE, &patch);
-                if ready && !is_superseded(command.id, &latest_command_id) {
-                    if voice.play_notes(&*sink, &messages, gate) {
-                        status.lock().unwrap().sounding = note_on_pitches(&messages);
-                    }
-                } else if ready {
-                    log_superseded_after_load(command.id, &latest_command_id);
-                }
-            }
-            SenderCommandKind::PlayLine {
-                patch,
-                program,
-                stop_before_prepare,
-            } => {
-                if stop_before_prepare {
-                    voice.stop(&*sink, "replace-line");
-                }
-                let ready = prepare_line_if_needed(&mut voice, &*sink, &status, &patch);
-                if ready && !is_superseded(command.id, &latest_command_id) {
-                    let played = voice.play_line(&*sink, &program);
-                    if played && !is_superseded(command.id, &latest_command_id) {
-                        publish_line_playback(&status, command.id, &program);
-                    } else if played {
-                        log_superseded_after_load(command.id, &latest_command_id);
-                    }
-                } else if ready {
-                    log_superseded_after_load(command.id, &latest_command_id);
-                }
-            }
-            SenderCommandKind::PlayLayers { layers } => layers::play_layered_command(
-                &mut voice,
-                &*sink,
-                &status,
-                command.id,
-                &latest_command_id,
-                layers,
-            ),
-            SenderCommandKind::Stop => voice.stop(&*sink, "stop"),
-            SenderCommandKind::Supersede => {}
-            SenderCommandKind::Shutdown => {
-                voice.stop(&*sink, "shutdown");
-                voice.abandon_preload(&*sink);
-            }
-        }
-        // 先読みは同じ列でその前に積まれた command の後に出す。
-        if !shutdown {
-            request_preloads(&mut voice, &*sink, &status, preloads);
-        }
-        log_line(format!(
-            "action=mml-overlay-command event=finished command_id={} command={name} \
-             elapsed_ms={}",
-            command.id,
-            started_at.elapsed().as_millis()
-        ));
-        if shutdown {
-            break;
-        }
-    }
-}
-
-fn request_preloads(
-    voice: &mut Voice,
-    sink: &impl SoundSink,
-    status: &Mutex<MmlOverlaySenderStatus>,
-    preloads: Vec<LivePatch>,
-) {
-    for patch in preloads {
-        voice.request_preload(sink, patch);
-    }
-    publish_preload(status, voice);
-}
-
-fn is_superseded(command_id: u64, latest_command_id: &AtomicU64) -> bool {
-    latest_command_id.load(Ordering::Acquire) > command_id
-}
-
-fn log_superseded_after_load(command_id: u64, latest_command_id: &AtomicU64) {
-    log_line(format!(
-        "action=mml-overlay-command event=superseded-after-load command_id={command_id} \
-         by_command_id={}",
-        latest_command_id.load(Ordering::Acquire)
-    ));
-}
-
-fn note_on_pitches(messages: &[[u8; 3]]) -> Vec<u8> {
-    messages
-        .iter()
-        .filter(|message| message[0] == crate::NOTE_ON && message[2] > 0)
-        .map(|message| message[1])
-        .collect()
 }
 
 #[cfg(test)]

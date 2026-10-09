@@ -133,6 +133,19 @@ pub(super) fn publish_line_playback(
     });
 }
 
+/// 打点ループは終わらない。`started_at` は周の先頭が鳴る実時刻。
+pub(super) fn publish_step_loop(
+    status: &Mutex<MmlOverlaySenderStatus>,
+    command_id: u64,
+    started_at: Instant,
+) {
+    status.lock().unwrap().line_playback = Some(MmlOverlayLinePlayback {
+        command_id,
+        started_at,
+        ends_at: None,
+    });
+}
+
 pub(super) fn publish_preload(status: &Mutex<MmlOverlaySenderStatus>, voice: &super::voice::Voice) {
     status.lock().unwrap().preload = voice.preload_state();
 }

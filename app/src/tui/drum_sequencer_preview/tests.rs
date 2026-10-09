@@ -1,6 +1,7 @@
 use super::*;
 use crate::screen_switch::PrimaryScreen;
-use cmrt_mml_overlay::{MmlOverlaySender, RecordingSink, SinkOperation};
+use cmrt_history::test_support::{temp_local_dirs, LocalDirGuards};
+use cmrt_mml_overlay::{MmlOverlaySender, RecordingSink};
 use std::{
     sync::Arc,
     time::{Duration, Instant},
@@ -21,17 +22,27 @@ fn wait_until(mut ready: impl FnMut() -> bool) {
     }
 }
 
-fn app_with_sink(sink: Arc<RecordingSink>) -> TuiApp<'static> {
+/// 編集のたびに kit の pattern ファイルを書くので、保存先はテストごとに分ける。
+fn app_with_sink(sink: Arc<RecordingSink>) -> (LocalDirGuards, TuiApp<'static>) {
+    let dirs = temp_local_dirs("drum_sequencer_preview");
     let mut app = TuiApp::new_for_test(crate::tui::tests::test_config());
     app.mml_overlay_sender = Some(MmlOverlaySender::with_recording_sink(sink, 48_000.0));
     app.switch_to_primary_screen(PrimaryScreen::DrumSequencer, None);
-    app.drum_sequencer
-        .screen
-        .set_kit("Kit.sfz".to_string(), Some(vec![36, 38]));
-    app
+    app.drum_sequencer.screen.set_kit(
+        "Kit.sfz".to_string(),
+        Some(vec![36, 38]),
+        Vec::new(),
+        Vec::new(),
+    );
+    (dirs, app)
 }
 
+/// 停止中の Shift+P で繰り返し再生を始め、sender が演奏開始を公開するまで待つ。
 fn play(app: &mut TuiApp<'_>, sink: &RecordingSink) {
+    assert!(
+        app.drum_sequencer.loop_hits.is_none(),
+        "play starts from stopped"
+    );
     let before = sink.timelines();
     app.dispatch_drum_sequencer_key_event(preview());
     wait_until(|| {
@@ -47,107 +58,83 @@ fn play(app: &mut TuiApp<'_>, sink: &RecordingSink) {
 }
 
 #[test]
-fn timeline_keeps_each_cell_concurrent_notes_and_final_off_without_filters() {
+fn loop_hits_are_kit_cells_in_step_order_and_keep_hidden_input_unsent() {
     let mut screen = DrumSequencerScreen::default();
-    screen.set_kit("kit".to_string(), Some(vec![36, 38, 42]));
-    screen.handle_key_event(key(KeyCode::Enter));
-    screen.handle_key_event(key(KeyCode::Char('j')));
-    screen.handle_key_event(key(KeyCode::Enter));
+    // 36 は one-shot。
+    screen.set_kit(
+        "kit".to_string(),
+        Some(vec![36, 38, 42]),
+        Vec::new(),
+        vec![36],
+    );
+    screen.handle_key_event(key(KeyCode::Char(' ')));
+    screen.handle_key_event(key(KeyCode::Char('k')));
+    screen.handle_key_event(key(KeyCode::Char(' ')));
     for _ in 0..15 {
         screen.handle_key_event(key(KeyCode::Char('l')));
     }
-    screen.handle_key_event(key(KeyCode::Char('k')));
-    screen.handle_key_event(key(KeyCode::Enter));
+    screen.handle_key_event(key(KeyCode::Char('j')));
+    screen.handle_key_event(key(KeyCode::Char(' ')));
+    // 最後の 36 を 3 step に伸ばす。gate は周の終わりを越えてよい。
     for _ in 0..2 {
-        screen.handle_key_event(key(KeyCode::Char('j')));
+        screen.handle_key_event(key(KeyCode::Char('+')));
     }
-    screen.handle_key_event(key(KeyCode::Enter));
-    screen.set_kit("kit subset".to_string(), Some(vec![36, 38]));
-    let program = preview_program(&screen);
-    assert!(!program.repeat);
-    assert!(!program.filters.modulation && !program.filters.velocity);
-    assert_eq!(program.performance.loop_seconds, 3.875);
-    let events: Vec<_> = program
-        .events()
+    // velocity はセルごと。
+    screen.handle_key_event(key(KeyCode::Char(',')));
+    for _ in 0..2 {
+        screen.handle_key_event(key(KeyCode::Char('k')));
+    }
+    screen.handle_key_event(key(KeyCode::Char(' ')));
+    screen.set_kit(
+        "kit subset".to_string(),
+        Some(vec![36, 38]),
+        Vec::new(),
+        Vec::new(),
+    );
+    let hits: Vec<_> = loop_hits(&screen)
         .iter()
-        .map(|event| (event.seconds, event.message))
+        .map(|hit| (hit.seconds, hit.note, hit.velocity, hit.gate_seconds))
         .collect();
+    // gate は各セルの音長。one-shot でない 38 は 4 分音符。
     assert_eq!(
-        events,
-        vec![
-            (0.0, [0x90, 36, 127]),
-            (0.0, [0x90, 38, 127]),
-            (1.875, [0x90, 36, 127]),
-            (2.0, [0x80, 36, 0]),
-            (2.0, [0x80, 38, 0]),
-            (3.875, [0x80, 36, 0]),
+        hits,
+        [
+            (0.0, 36, 127, 0.125),
+            (0.0, 38, 127, 0.5),
+            (1.875, 36, 119, 0.375)
         ]
+    );
+    assert_eq!(
+        LOOP_SECONDS, 2.0,
+        "the cycle never follows the last hit or gate"
     );
     assert!(
         screen.cell_on(42, 15),
         "hidden input survives without being sent"
     );
-    screen.set_kit("unknown".to_string(), None);
-    assert!(preview_program(&screen).is_silent());
-}
-
-#[test]
-fn preview_restarts_once_and_empty_only_stops_without_loading() {
-    let sink = Arc::new(RecordingSink::default());
-    let mut app = app_with_sink(Arc::clone(&sink));
-    app.dispatch_drum_sequencer_key_event(key(KeyCode::Enter));
-    assert!(
-        sink.operations().is_empty(),
-        "editing and screen entry are silent"
-    );
-    play(&mut app, &sink);
-    let first = sink.timeline_events();
-    assert_eq!(first.len(), 2);
-    assert_eq!(first[0].message, [0x90, 36, 127]);
-    assert!((first[1].timeline_seconds - first[0].timeline_seconds - 2.0).abs() < 1e-9);
-    let interval = app
-        .mml_overlay_sender
-        .as_ref()
-        .unwrap()
-        .status()
-        .line_playback()
-        .unwrap();
-    assert_eq!(
-        interval.ends_at().unwrap() - interval.started_at(),
-        Duration::from_secs(2)
-    );
-    let before = sink.operations().len();
-    play(&mut app, &sink);
-    assert!(
-        sink.operations()[before..].starts_with(&[SinkOperation::Stop, SinkOperation::Timeline])
-    );
-    assert_eq!(sink.prepared(), vec![LivePatch::new(Some("Kit.sfz"))]);
-    assert_eq!(
-        sink.timeline_events().len(),
-        4,
-        "no modulation or repeat events"
-    );
-    app.dispatch_drum_sequencer_key_event(key(KeyCode::Enter));
-    let stops = sink.stops();
-    app.dispatch_drum_sequencer_key_event(preview());
-    wait_until(|| sink.stops() > stops);
-    assert_eq!(sink.timelines(), 2);
-    assert_eq!(sink.prepared().len(), 1, "empty phrase does not prepare");
+    screen.set_kit("unknown".to_string(), None, Vec::new(), Vec::new());
+    assert!(loop_hits(&screen).is_empty());
 }
 
 #[test]
 fn loading_stops_old_queue_and_departure_cancels_pending_preview() {
     let sink = Arc::new(RecordingSink::default());
-    let mut app = app_with_sink(Arc::clone(&sink));
-    app.dispatch_drum_sequencer_key_event(key(KeyCode::Enter));
+    let (_dirs, mut app) = app_with_sink(Arc::clone(&sink));
+    app.dispatch_drum_sequencer_key_event(key(KeyCode::Char(' ')));
     play(&mut app, &sink);
     let sender = app.mml_overlay_sender.as_ref().unwrap();
     sender.preload(LivePatch::new(Some("Background.sfz")));
     wait_until(|| !sink.preloads().is_empty());
-    app.drum_sequencer
-        .screen
-        .set_kit("NewKit.sfz".to_string(), Some(vec![36]));
+    app.drum_sequencer.screen.set_kit(
+        "NewKit.sfz".to_string(),
+        Some(vec![36]),
+        Vec::new(),
+        Vec::new(),
+    );
     let stops = sink.stops();
+    // 1 回目で走っているループを止め、2 回目で新しい kit のループを始める。
+    app.dispatch_drum_sequencer_key_event(preview());
+    assert!(app.drum_sequencer.loop_hits.is_none());
     app.dispatch_drum_sequencer_key_event(preview());
     wait_until(|| {
         app.mml_overlay_sender
@@ -201,7 +188,7 @@ fn loading_stops_old_queue_and_departure_cancels_pending_preview() {
 #[test]
 fn kit_reconfirmation_overlay_quit_and_shutdown_stop_existing_preview() {
     let sink = Arc::new(RecordingSink::default());
-    let mut app = app_with_sink(Arc::clone(&sink));
+    let (_dirs, mut app) = app_with_sink(Arc::clone(&sink));
     *app.patch_load_state.lock().unwrap() = crate::tui::PatchLoadState::Loading;
     // All keys are consumed by the selector, including global shortcuts and q/P.
     app.dispatch_drum_sequencer_key_event(key(KeyCode::Enter));
@@ -244,14 +231,17 @@ fn kit_reconfirmation_overlay_quit_and_shutdown_stop_existing_preview() {
         app.drum_sequencer.screen.cell_on(36, 0),
         "reconfirmation consumes Enter"
     );
-    assert_eq!(sink.timelines(), 1);
     play(&mut app, &sink);
     let stops = sink.stops();
+    let timelines = sink.timelines();
     assert!(app.try_open_mml_overlay(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL)));
     wait_until(|| sink.stops() > stops);
     app.handle_mml_overlay_key_event(key(KeyCode::Esc));
-    let timelines = sink.timelines();
-    assert_eq!(timelines, 2, "closing overlay cannot resume Drum preview");
+    assert_eq!(
+        sink.timelines(),
+        timelines,
+        "closing overlay itself does not resume; the frame pump does"
+    );
     play(&mut app, &sink);
     let stops = sink.stops();
     assert!(app.dispatch_drum_sequencer_key_event(key(KeyCode::Char('q'))));
@@ -268,8 +258,8 @@ fn kit_reconfirmation_overlay_quit_and_shutdown_stop_existing_preview() {
 #[test]
 fn shift_p_conventions_are_press_only_and_menu_roundtrip_keeps_cells() {
     let sink = Arc::new(RecordingSink::default());
-    let mut app = app_with_sink(Arc::clone(&sink));
-    app.dispatch_drum_sequencer_key_event(key(KeyCode::Enter));
+    let (_dirs, mut app) = app_with_sink(Arc::clone(&sink));
+    app.dispatch_drum_sequencer_key_event(key(KeyCode::Char(' ')));
     for (code, modifiers, expected) in [
         (KeyCode::Char('P'), KeyModifiers::NONE, true),
         (KeyCode::Char('P'), KeyModifiers::SHIFT, true),
@@ -298,14 +288,15 @@ fn shift_p_conventions_are_press_only_and_menu_roundtrip_keeps_cells() {
     assert!(app.drum_sequencer.screen.cell_on(36, 0));
     assert_eq!(sink.timelines(), 0);
     let text = crate::tui::ui::tests::render_lines(&mut app, 120, 24).join("\n");
-    assert!(text.contains("Drum Sequencer") && text.contains("Shift+P:preview"));
+    let compact: String = text.chars().filter(|ch| !ch.is_whitespace()).collect();
+    assert!(text.contains("Drum Sequencer") && compact.contains("Shift+P:再生/停止"));
 }
 
 #[test]
 fn failed_patch_preparation_reports_reason_and_keeps_input() {
     let sink = Arc::new(RecordingSink::failing_prepare("fixture kit load failure"));
-    let mut app = app_with_sink(Arc::clone(&sink));
-    app.dispatch_drum_sequencer_key_event(key(KeyCode::Enter));
+    let (_dirs, mut app) = app_with_sink(Arc::clone(&sink));
+    app.dispatch_drum_sequencer_key_event(key(KeyCode::Char(' ')));
     app.dispatch_drum_sequencer_key_event(preview());
     wait_until(|| {
         app.mml_overlay_sender
@@ -320,4 +311,73 @@ fn failed_patch_preparation_reports_reason_and_keeps_input() {
     assert!(app.drum_sequencer.screen.cell_on(36, 0));
     assert_eq!(sink.timelines(), 0);
     assert!(app.sound_startup_wait.is_none());
+    assert!(
+        app.drum_sequencer.loop_hits.is_none(),
+        "a failed loop is not running, so the next Shift+P starts again"
+    );
+    app.dispatch_drum_sequencer_key_event(preview());
+    wait_until(|| sink.prepared().len() == 2);
 }
+
+#[test]
+fn help_captures_global_and_matrix_keys_without_stopping_the_preview() {
+    let sink = Arc::new(RecordingSink::default());
+    let (_dirs, mut app) = app_with_sink(Arc::clone(&sink));
+    app.dispatch_drum_sequencer_key_event(key(KeyCode::Char(' ')));
+    play(&mut app, &sink);
+    let (stops, timelines) = (sink.stops(), sink.timelines());
+
+    for close in [KeyCode::Esc, KeyCode::Char('?')] {
+        assert!(!app.dispatch_drum_sequencer_key_event(key(KeyCode::Char('?'))));
+        assert!(app.drum_sequencer.captures_keys());
+        assert!(!app.can_open_screen_switch_menu());
+        assert!(!app.try_open_mml_overlay(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL)));
+        assert!(!app.mml_overlay.is_open());
+        for code in [
+            KeyCode::Char('t'),
+            KeyCode::Char('P'),
+            KeyCode::Char('l'),
+            KeyCode::Enter,
+            KeyCode::Char('q'),
+        ] {
+            assert!(
+                !app.dispatch_drum_sequencer_key_event(key(code)),
+                "{code:?}"
+            );
+        }
+        assert!(!app.drum_sequencer.selector_open(), "t must not open kits");
+        assert!(!app.dispatch_drum_sequencer_key_event(key(close)));
+        assert!(!app.drum_sequencer.captures_keys(), "{close:?}");
+        assert!(app.can_open_screen_switch_menu());
+    }
+    let screen = &app.drum_sequencer.screen;
+    assert_eq!((screen.cursor_note(), screen.cursor_step()), (Some(36), 0));
+    assert!(screen.cell_on(36, 0));
+    assert_eq!(
+        sink.stops(),
+        stops,
+        "help must not stop the running preview"
+    );
+    assert_eq!(
+        sink.timelines(),
+        timelines,
+        "Shift+P behind help must not play"
+    );
+    assert!(app.drum_sequencer.preview_command.is_some());
+}
+
+#[test]
+fn audition_program_is_ascending_quarter_second_note_ons_of_existing_notes_only() {
+    let program = kit_audition_program(&[70, 36, 42, 42]);
+    assert!(!program.repeat);
+    let ons: Vec<_> = program
+        .events()
+        .iter()
+        .filter(|event| event.message[0] == 0x90)
+        .map(|event| (event.seconds, event.message[1]))
+        .collect();
+    assert_eq!(ons, [(0.0, 36), (0.25, 42), (0.5, 70)]);
+}
+
+mod auto_play;
+mod step_loop;

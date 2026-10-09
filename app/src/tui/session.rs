@@ -9,10 +9,12 @@ use super::voicing::CatalogVoicings;
 use super::{PatchLoadState, TuiApp};
 use crate::config::Config;
 
+mod drum_sequencer;
 mod grid_sequencer;
 mod persist;
 mod restore;
 
+use drum_sequencer::drum_session_from_history;
 use grid_sequencer::grid_session_from_history;
 use restore::{
     apply_startup_keyboard, bpm_range_from_history, load_initial_session_state,
@@ -150,6 +152,7 @@ impl<'a> TuiApp<'a> {
             grid_sequencer_track_count,
             grid_sequencer_chord_mode,
             grid_sequencer,
+            drum_sequencer,
             grid_sequencer_bpm,
             loop_browser_bpm,
             grid_sequencer_bpm_range,
@@ -282,7 +285,8 @@ impl<'a> TuiApp<'a> {
                     effect_plugins: grid_effect_plugins,
                 },
             ),
-            drum_sequencer: Default::default(),
+            // kit は名前だけ戻り、catalog の読み込み後に照合する。再生は止まった状態で始める。
+            drum_sequencer: drum_session_from_history(drum_sequencer),
             // 保存済みの曲。ネットワークには触らないので起動時に読んでよい
             // （この画面がネットワークを要するのはコード進行カタログだけ）。
             // 読めなかったとき（初回 / 壊れている）に曲をでっち上げるのはここではない。

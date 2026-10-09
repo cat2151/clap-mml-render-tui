@@ -27,7 +27,7 @@ pub use live_line::{live_line, LiveLine};
 pub use cmrt_patch_select::{PatchAudition, PatchCatalogEntry, PlaySettings};
 pub use sender::{
     LineLayer, LivePatch, MmlOverlayLinePlayback, MmlOverlayPreload, MmlOverlaySender,
-    MmlOverlaySenderStatus,
+    MmlOverlaySenderStatus, StepHit, StepLoop, StepShot,
 };
 #[cfg(any(test, feature = "test-support"))]
 pub use sender::{RecordingSink, SinkOperation};

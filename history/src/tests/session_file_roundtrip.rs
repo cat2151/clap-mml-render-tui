@@ -12,6 +12,7 @@ fn save_and_load_session_state_roundtrip() {
         grid_sequencer_track_count: 16,
         grid_sequencer_chord_mode: false,
         grid_sequencer: None,
+        drum_sequencer: None,
         grid_sequencer_bpm: None,
         loop_browser_bpm: None,
         grid_sequencer_bpm_range: None,
@@ -48,6 +49,7 @@ fn save_and_load_session_state_roundtrip_daw_mode() {
         grid_sequencer_track_count: 16,
         grid_sequencer_chord_mode: false,
         grid_sequencer: None,
+        drum_sequencer: None,
         grid_sequencer_bpm: None,
         loop_browser_bpm: None,
         grid_sequencer_bpm_range: None,
@@ -115,4 +117,46 @@ fn a_history_file_written_before_the_play_settings_existed_loads_with_them_all_o
         MmlOverlayPlaySettings::default()
     );
     assert!(!loaded.mml_overlay_play_settings.repeat);
+}
+
+#[test]
+fn drum_sequencer_state_round_trips_and_a_bad_one_keeps_the_other_screens() {
+    let drum = DrumSequencerSessionState {
+        kit: Some("Drums/Kit.sfz".to_string()),
+        pattern: 5,
+        cursor_note: Some(38),
+        cursor_step: 4,
+    };
+    let state = SessionState {
+        active_screen: PrimaryScreen::Keyboard,
+        drum_sequencer: Some(drum.clone()),
+        mml_overlay_patch: Some("Leads/Lead.fxp".to_string()),
+        ..SessionState::default()
+    };
+    let json = serde_json::to_value(&state).unwrap();
+    let loaded: SessionState = serde_json::from_value(json.clone()).unwrap();
+    assert_eq!(loaded.drum_sequencer, Some(drum));
+
+    let mut old = json.clone();
+    old.as_object_mut().unwrap().remove("drum_sequencer");
+    let loaded: SessionState = serde_json::from_value(old).unwrap();
+    assert_eq!(loaded.drum_sequencer, None);
+    assert_eq!(loaded.mml_overlay_patch.as_deref(), Some("Leads/Lead.fxp"));
+
+    for bad in [
+        serde_json::json!("not an object"),
+        serde_json::json!({ "pattern": "bad" }),
+        serde_json::json!({ "kit": "Drums/Kit.sfz", "cursor_note": 300 }),
+    ] {
+        let mut broken = json.clone();
+        broken["drum_sequencer"] = bad.clone();
+        let loaded: SessionState = serde_json::from_value(broken).unwrap();
+        assert_eq!(loaded.drum_sequencer, None, "{bad}");
+        assert_eq!(loaded.active_screen, PrimaryScreen::Keyboard, "{bad}");
+        assert_eq!(
+            loaded.mml_overlay_patch.as_deref(),
+            Some("Leads/Lead.fxp"),
+            "{bad}"
+        );
+    }
 }

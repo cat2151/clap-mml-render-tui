@@ -4,14 +4,14 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::Style,
     text::{Line, Span},
-    widgets::{Block, Borders, Cell, Clear, Paragraph, Row, Table, TableState, Wrap},
+    widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState, Wrap},
     Frame,
 };
 
 use cmrt_tui_core::{
     status::{base_style, LIST_HIGHLIGHT_SYMBOL},
     theme::{cursor_highlight_style, MONOKAI_FG, MONOKAI_PINK, MONOKAI_YELLOW},
-    ui::centered_rect,
+    ui::{centered_rect, clear_overlay_area},
 };
 
 use super::{auto_reverb, plugin_menu};
@@ -68,7 +68,7 @@ pub(super) fn draw_in(
     area: Rect,
     options: &PatchSelectDrawOptions<'_>,
 ) {
-    frame.render_widget(Clear, area);
+    clear_overlay_area(frame, area);
 
     // 案内が無いときは 1 行も取らない。ふだんの見え方を変えないため。
     let notes_height = notes_height(select, area.width);

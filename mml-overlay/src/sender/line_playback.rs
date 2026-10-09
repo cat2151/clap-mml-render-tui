@@ -25,6 +25,7 @@
 
 mod filters;
 mod repeat;
+mod step_loop;
 
 use std::time::{Duration, Instant};
 
@@ -35,6 +36,7 @@ use crate::line_play::LineProgram;
 
 use super::layers::LineLayer;
 use super::sink::{SoundSink, TimelineSendError};
+use super::step_loop::StepLoopState;
 use super::{log_error, log_line};
 
 use repeat::RepeatState;
@@ -80,6 +82,8 @@ pub(super) struct LinePlayback {
     next_timeline_id: TimelineId,
     /// 走っているループ。repeat OFF の演奏でも [`Self::stop_repeat`] でも捨てる。
     repeat: Option<RepeatState>,
+    /// 打点を差し替えられるループ（[`super::step_loop`]）。`repeat` とは同時に走らない。
+    step_loop: Option<(TimelineId, StepLoopState)>,
     /// 行を鳴らしている instance。ループの継ぎ足しも同じ instance へ積む。
     instance_id: u8,
 }
@@ -90,6 +94,7 @@ impl LinePlayback {
             sample_rate_hz,
             next_timeline_id: 1,
             repeat: None,
+            step_loop: None,
             instance_id: 0,
         }
     }
@@ -104,7 +109,7 @@ impl LinePlayback {
         instance_id: u8,
         program: &LineProgram,
     ) -> LineOutcome {
-        self.repeat = None;
+        self.stop_repeat();
         self.instance_id = instance_id;
         let timeline_id = self.next_timeline_id;
         self.next_timeline_id = advance_timeline_id(timeline_id);
@@ -163,7 +168,7 @@ impl LinePlayback {
         sink: &impl SoundSink,
         layers: &[LineLayer],
     ) -> LineOutcome {
-        self.repeat = None;
+        self.stop_repeat();
         let timeline_id = self.next_timeline_id;
         self.next_timeline_id = advance_timeline_id(timeline_id);
         if !begin_timeline(sink, timeline_id, self.sample_rate_hz) {
@@ -182,6 +187,14 @@ impl LinePlayback {
     /// 返すのは何か積んだときだけ。`Partial` は継ぎ足しに失敗してループを捨てたことを表し、
     /// 積んだ note on の note off が落ちている恐れがある。
     pub(super) fn pump(&mut self, sink: &impl SoundSink, now: Instant) -> Option<LineOutcome> {
+        if let Some((timeline_id, state)) = self.step_loop.as_mut() {
+            let events = state.take_due_events(now);
+            if !send_cycle(sink, *timeline_id, self.instance_id, &events) {
+                self.step_loop = None;
+                return Some(LineOutcome::Partial);
+            }
+            return Some(LineOutcome::Playing);
+        }
         let state = self.repeat.as_mut()?;
         if !send_laps(sink, state, self.instance_id, now) {
             self.repeat = None;
@@ -192,6 +205,9 @@ impl LinePlayback {
 
     /// 次に [`Self::pump`] が仕事をするまでの待ち。ループが無ければ `None`。
     pub(super) fn repeat_wait(&self, now: Instant) -> Option<Duration> {
+        if let Some((_, state)) = &self.step_loop {
+            return Some(state.wait(now));
+        }
         self.repeat.as_ref().map(|state| state.wait(now))
     }
 
@@ -201,6 +217,7 @@ impl LinePlayback {
     /// ここがやるのは「もう継ぎ足さない」ことだけ。
     pub(super) fn stop_repeat(&mut self) {
         self.repeat = None;
+        self.step_loop = None;
     }
 }
 

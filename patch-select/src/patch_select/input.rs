@@ -1,4 +1,4 @@
-//! selector のキー配送。固定モードは候補移動・検索・確定・取消に限定する。
+//! selector のキー配送。固定モードは候補移動・検索・Space 試聴・確定・取消に限定する。
 
 use super::*;
 use crossterm::event::KeyEventKind;
@@ -41,7 +41,7 @@ impl PatchSelect<'_> {
         if !self.drum_kit_only && is_plugin_menu_key(key) {
             return self.open_plugin_menu();
         }
-        if !self.drum_kit_only && is_preview_key(key) {
+        if is_preview_key(key) {
             return self.play_selected_line();
         }
         if !self.drum_kit_only && is_add_preset_key(key) {

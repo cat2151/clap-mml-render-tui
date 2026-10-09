@@ -53,3 +53,28 @@ fn frame_background_replaces_every_previous_cell() {
         .iter()
         .all(|cell| cell.bg == crate::theme::MONOKAI_BG));
 }
+
+/// 端末が受け取る内容（TestBackend の buffer）で、overlay の左上の角が出るかを見る。
+fn overlay_corner_over_wide_text(clear: fn(&mut Frame<'_>, Rect)) -> String {
+    let mut terminal = Terminal::new(TestBackend::new(8, 2)).unwrap();
+    terminal
+        .draw(|f| {
+            f.render_widget(Paragraph::new("aで"), f.area());
+            let area = Rect::new(2, 0, 4, 2);
+            clear(f, area);
+            f.render_widget(Block::default().borders(Borders::ALL), area);
+        })
+        .unwrap();
+    let buffer = terminal.backend().buffer();
+    (0..4).map(|x| buffer[(x, 0)].symbol()).collect()
+}
+
+#[test]
+fn clear_overlay_area_keeps_corner_when_wide_char_straddles_left_edge() {
+    fn plain_clear(f: &mut Frame<'_>, area: Rect) {
+        f.render_widget(Clear, area);
+    }
+    // 背面の「で」は x=1..2 を占め、overlay の左端 x=2 へはみ出す。
+    assert_ne!(overlay_corner_over_wide_text(plain_clear), "a ┌─");
+    assert_eq!(overlay_corner_over_wide_text(clear_overlay_area), "a ┌─");
+}

@@ -33,7 +33,7 @@ pub use clap_mml_play_server_core::{is_sfz_patch_path, sfz_sample_weight, SfzSam
 // catalog 構築が、鍵ごとに別の音を割り当てた kit を patch select で見分けられるよう記録する。
 pub use clap_mml_play_server_core::{
     floe_note_assignments, floe_preset_is_percussion, is_floe_preset_path, sfz_is_drum_kit,
-    sfz_note_assignments,
+    sfz_note_assignments, sfz_one_shot_notes, DrumKitNote,
 };
 
 use mmlabc_to_smf::mml_preprocessor;

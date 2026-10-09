@@ -18,7 +18,7 @@ pub struct PatchSelectRequest {
     pub role_index: PatchRoleIndex,
     /// 今の音色の Role が分からないときに開く Role。`None` なら `ALL`。
     pub initial_role: Option<PatchRole>,
-    /// Drum tracks / Drum kit に固定し、候補移動・検索・確定・取消だけを使う。
+    /// Drum tracks / Drum kit に固定し、候補移動・検索・Space 試聴・確定・取消だけを使う。
     /// kit は名前の Role にかかわらず `drum_kit=true` の全 patch。
     pub drum_kit_only: bool,
     /// 設定不足でカタログから外れたプラグインの案内。

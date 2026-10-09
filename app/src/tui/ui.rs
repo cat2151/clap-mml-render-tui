@@ -106,8 +106,9 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
     // 通常運転ではない play server を掴んでいるときだけ右上に出る。DAW 画面は
     // 自前の描画ループを持つので、あちらでも同じものを呼んでいる（ADR 0017）。
     cmrt_tui_core::server_profile_badge::draw(f, app.play_server.server_binary());
-    if app.active_screen == PrimaryScreen::DrumSequencer {
-        app.drum_sequencer.draw_selector(f);
+    if app.active_screen == PrimaryScreen::DrumSequencer && app.drum_sequencer.selector_open() {
+        let view = app.kit_audition_view(now);
+        app.drum_sequencer.draw_selector(f, &view);
     }
     // 音が鳴らない理由なので、どの画面・どのオーバーレイよりも前に出す。
     if let Some(failure) = app.play_server_notice() {

@@ -4,10 +4,10 @@
 //! 止めない。** 音を出すメソッドはどれも先頭で [`Voice::stop`] を通る。ここを通らずに
 //! 音を出す経路を足さないこと。足した瞬間に「誰も note off を出さない」経路が復活する。
 //!
-//! **例外は [`Voice::pump_repeat`] ただ 1 つ。** 走っているループへ次の周を継ぎ足す
-//! ときだけ [`Voice::stop`] を通らない。理由は、各周が note on と note off の対で
-//! 自己完結していて、しかも未来の位置にしか積まないため、「誰も note off を出さない」
-//! 経路にならないから。逆にここで止めてしまうと継ぎ目が出る（それを避けるのが repeat の
+//! **例外は [`Voice::pump_repeat`] ただ 1 つ。** 走っているループ（打点ループを含む）へ
+//! 先を継ぎ足すときだけ [`Voice::stop`] を通らない。理由は、未来の位置にしか積まず、
+//! 積んだ timeline の音は停止時に server 管理の全NoteOff で止まるため、「誰も note off を
+//! 出さない」経路にならないから。逆にここで止めてしまうと継ぎ目が出る（それを避けるのが repeat の
 //! 設計そのもの）。新しい行・別の音色・Close・Stop は従来どおり [`Voice::stop`] を通り、
 //! そこでループも捨てる。
 //!
@@ -431,5 +431,6 @@ fn optional_ms(value: Option<u128>) -> String {
 mod line_instance;
 mod preload;
 mod server_drops;
+mod step_loop;
 #[cfg(test)]
 mod tests;

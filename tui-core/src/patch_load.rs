@@ -33,6 +33,13 @@ pub struct PatchLoadMeasurement {
     /// kit の全 note-on 割当。None は旧 cache/抽出失敗、Some([]) は取得済みで割当なし。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub drum_kit_notes: Option<Vec<u8>>,
+    /// `drum_kit_notes` のうち、音源定義から名前を得られた note と表示名。note の昇順。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub drum_kit_note_names: Vec<(u8, String)>,
+    /// `drum_kit_notes` のうち、note off を無視して鳴りきる（`.sfz` の `loop_mode=one_shot`）note。
+    /// 昇順。Floe preset と抽出失敗は空。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub drum_kit_one_shot_notes: Vec<u8>,
 }
 
 /// これ以上の sample 総容量を持つ `.sfz` は、offline render の全量ロードが数秒を超える。

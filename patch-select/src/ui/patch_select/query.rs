@@ -41,7 +41,8 @@ pub(super) fn draw_query(
 
 fn query_title(select: &PatchSelect<'_>, show_play_settings_hint: bool) -> String {
     if select.drum_kit_only() {
-        return " Regex (空白=AND)  /:編集  Enter:kit 決定  Esc:取消 ".to_string();
+        // `?` の help は、このモードの host（drum 画面）が selector の上に出す。
+        return " Regex (空白=AND)  /:編集  Enter:kit 決定  Esc:取消  ?:help ".to_string();
     }
     let play_settings = if show_play_settings_hint {
         "  S:演奏設定"

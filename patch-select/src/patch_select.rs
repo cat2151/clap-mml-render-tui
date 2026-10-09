@@ -91,7 +91,8 @@ pub struct PatchSelect<'a> {
     user_presets: Vec<(String, String)>,
     role_index: PatchRoleIndex,
     prepared_presets: PreparedPresets,
-    /// Role / Preset を固定し、試聴や設定を返さない選択専用モード。
+    /// Role / Preset を固定し、設定を返さない選択専用モード。
+    /// 返す試聴は Space の [`PatchSelectAction::PlayLine`] だけで、候補移動では返さない。
     drum_kit_only: bool,
     group_cursor: usize,
     preset_cursor: usize,

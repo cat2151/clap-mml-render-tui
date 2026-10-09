@@ -71,7 +71,7 @@ impl<'a> TuiApp<'a> {
             PrimaryScreen::GridSequencer => {
                 !self.grid_sequencer.help_open && !self.grid_sequencer.history_open()
             }
-            PrimaryScreen::DrumSequencer => !self.drum_sequencer.selector_open(),
+            PrimaryScreen::DrumSequencer => !self.drum_sequencer.captures_keys(),
             PrimaryScreen::ChordChart => {
                 !self.chord_chart.help_open && !self.chord_chart.line_input_open()
             }
@@ -144,6 +144,7 @@ impl<'a> TuiApp<'a> {
             // chord chart の preview はカーソルが動いたときだけ鳴るので、
             // オーバーレイを閉じた時点では鳴らし直さない。
             // guitar articulation も `b` / `space` を押したときだけ鳴る。
+            // drum sequencer は毎フレームの自動開始が鳴らし直す。
             PrimaryScreen::ChordChart
             | PrimaryScreen::DrumSequencer
             | PrimaryScreen::GuitarArticulation

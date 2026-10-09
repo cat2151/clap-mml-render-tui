@@ -31,14 +31,23 @@ pub(super) fn record(
             ));
         }
         measurement.drum_kit = is_drum_kit(&patch_plugins, display);
-        // load 計測を再利用しても、割当は必ず今回の file から取得する。
+        // load 計測を再利用しても、割当と名前は必ず今回の file から取得する。
         measurement.drum_kit_notes = None;
+        measurement.drum_kit_note_names.clear();
+        measurement.drum_kit_one_shot_notes.clear();
         if measurement.drum_kit {
             super::report_progress(format!(
                 "  Drum kit の割当 note 一覧を抽出します: {display}"
             ));
             match note_assignments(&patch_plugins, display) {
-                Ok(notes) => measurement.drum_kit_notes = Some(notes),
+                Ok((notes, one_shot)) => {
+                    measurement.drum_kit_note_names = notes
+                        .iter()
+                        .filter_map(|note| Some((note.note, note.name.clone()?)))
+                        .collect();
+                    measurement.drum_kit_notes = Some(notes.iter().map(|note| note.note).collect());
+                    measurement.drum_kit_one_shot_notes = one_shot;
+                }
                 Err(error) => diagnostics.push(format!(
                     "drum kit note 一覧の抽出失敗: {display}: {error:#}"
                 )),
@@ -48,14 +57,21 @@ pub(super) fn record(
     diagnostics
 }
 
-fn note_assignments(patch_plugins: &PatchPlugins, display: &str) -> anyhow::Result<Vec<u8>> {
+/// 割当 note と、そのうち one-shot の note。Floe preset は one-shot を判定しない。
+fn note_assignments(
+    patch_plugins: &PatchPlugins,
+    display: &str,
+) -> anyhow::Result<(Vec<cmrt_core::DrumKitNote>, Vec<u8>)> {
     let plugin = patch_plugins.for_patch(display)?;
     let path = plugin.base.resolve(display);
     let path = Path::new(&path);
     if cmrt_core::is_sfz_patch_path(display) {
-        cmrt_core::sfz_note_assignments(path)
+        Ok((
+            cmrt_core::sfz_note_assignments(path)?,
+            cmrt_core::sfz_one_shot_notes(path)?,
+        ))
     } else {
-        cmrt_core::floe_note_assignments(path)
+        Ok((cmrt_core::floe_note_assignments(path)?, Vec::new()))
     }
 }
 

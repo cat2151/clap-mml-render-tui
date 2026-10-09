@@ -11,6 +11,8 @@ use std::path::PathBuf;
 
 mod auto_reverb_rules;
 mod daw;
+mod drum_pattern_files;
+mod drum_sequencer_session;
 mod grid_sequencer_session;
 mod helpers;
 mod mml_patch_filter_presets;
@@ -31,6 +33,8 @@ pub use daw::{
     daw_cache_mml_hash, load_daw_session_state, save_daw_session_state,
     save_daw_sound_check_guide_overlay_date, DawCachedMeasure, DawSessionState,
 };
+pub use drum_pattern_files::{load_drum_pattern_files, save_drum_pattern_file};
+pub use drum_sequencer_session::DrumSequencerSessionState;
 pub use grid_sequencer_session::{
     GridCycleRandomState, GridDrumRoleState, GridFixedChordState, GridLaneModeState,
     GridNoteStepState, GridSequencerInstanceState, GridSequencerLaneState, GridSequencerRowState,

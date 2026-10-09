@@ -7,23 +7,33 @@
 use std::sync::mpsc;
 
 use super::live_patch::LivePatch;
+use super::step_loop::StepLoopEdit;
 use super::{log_line, SenderCommand};
 
 pub(super) enum WorkerMessage {
     Command(SenderCommand),
     /// 鳴っていない bank へこの音色を読んでおく。
     Preload(LivePatch),
+    /// 走っている打点ループを変える。
+    StepLoop(StepLoopEdit),
+}
+
+/// 列から取り出したもの。
+pub(super) struct Drained {
+    /// 最新の 1 つ。
+    pub(super) command: Option<SenderCommand>,
+    /// 積まれた順に全部。
+    pub(super) preloads: Vec<LivePatch>,
+    /// 最後の command より後に積まれた、ループへの変更を積まれた順に全部。command より前の
+    /// 変更は、その command（新しいループ）の内容より古いので捨てる。
+    pub(super) step_edits: Vec<StepLoopEdit>,
 }
 
 /// 列に溜まっているものを全部取り出す。
-///
-/// command は最新の 1 つ（無ければ `None`）、先読みは積まれた順に全部を返す。
-pub(super) fn drain_queue(
-    received: WorkerMessage,
-    rx: &mpsc::Receiver<WorkerMessage>,
-) -> (Option<SenderCommand>, Vec<LivePatch>) {
+pub(super) fn drain_queue(received: WorkerMessage, rx: &mpsc::Receiver<WorkerMessage>) -> Drained {
     let mut command: Option<SenderCommand> = None;
     let mut preloads = Vec::new();
+    let mut step_edits = Vec::new();
     let mut next = Some(received);
     while let Some(message) = next.take().or_else(|| rx.try_recv().ok()) {
         match message {
@@ -36,11 +46,17 @@ pub(super) fn drain_queue(
                     ));
                 }
                 command = Some(newer);
+                step_edits.clear();
             }
             WorkerMessage::Preload(patch) => preloads.push(patch),
+            WorkerMessage::StepLoop(edit) => step_edits.push(edit),
         }
     }
-    (command, preloads)
+    Drained {
+        command,
+        preloads,
+        step_edits,
+    }
 }
 
 #[cfg(test)]

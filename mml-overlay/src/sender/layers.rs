@@ -8,8 +8,12 @@ use std::{
 use crate::line_play::LinePerformance;
 
 use super::{
-    is_superseded, live_patch::LivePatch, log_superseded_after_load, sink::SoundSink,
-    status::MmlOverlayLinePlayback, status::MmlOverlaySenderStatus, voice::Voice,
+    live_patch::LivePatch,
+    sink::SoundSink,
+    status::MmlOverlayLinePlayback,
+    status::MmlOverlaySenderStatus,
+    voice::Voice,
+    worker::{is_superseded, log_superseded_after_load},
     MML_OVERLAY_INSTANCE,
 };
 

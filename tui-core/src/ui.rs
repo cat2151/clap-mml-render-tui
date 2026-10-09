@@ -23,6 +23,24 @@ pub fn draw_frame_background(f: &mut Frame<'_>) {
     );
 }
 
+/// overlay の矩形を消す。背面の全角文字が左端の外から矩形へはみ出していれば、その文字も消す。
+///
+/// はみ出しを残すと、端末へ送る差分は全角文字の右半分にあたる overlay の左端セルを送らず、
+/// 枠の左端が欠けて背面の文字が overlay へ混ざって見える。
+pub fn clear_overlay_area(f: &mut Frame<'_>, area: Rect) {
+    f.render_widget(Clear, area);
+    if area.x == 0 {
+        return;
+    }
+    let buffer = f.buffer_mut();
+    for y in area.top()..area.bottom().min(buffer.area.bottom()) {
+        let cell = &mut buffer[(area.x - 1, y)];
+        if Span::raw(cell.symbol()).width() > 1 {
+            cell.set_symbol(" ");
+        }
+    }
+}
+
 /// 指定した割合で中央に配置した矩形を返す。ポップアップ表示に利用する。
 pub fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
     let px = percent_x.min(100);

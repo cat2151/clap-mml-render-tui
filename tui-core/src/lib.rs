@@ -8,6 +8,7 @@ pub mod bpm;
 pub mod buffer_test;
 pub mod clipboard;
 pub mod generate;
+pub mod help_line;
 pub mod keyboard_session_state;
 pub mod logging;
 pub mod memory;

@@ -141,9 +141,9 @@ fn fixed_mode_keeps_every_kit_and_cannot_change_role_or_preset() {
 }
 
 #[test]
-fn fixed_mode_search_and_actions_never_broaden_or_audition_the_kit_set() {
+fn fixed_mode_search_and_actions_never_broaden_the_kit_set() {
     let mut select = fixed();
-    for ch in ['a', 'r', 'm', 'e', 'E', 's', ' '] {
+    for ch in ['a', 'r', 'm', 'e', 'E', 's'] {
         assert_eq!(
             select.handle_key(press(KeyCode::Char(ch))),
             PatchSelectAction::Continue
@@ -166,6 +166,34 @@ fn fixed_mode_search_and_actions_never_broaden_or_audition_the_kit_set() {
     type_text(&mut select, "warm");
     assert_eq!(select.filtered_len(), 0);
     assert_eq!(select.previewed(), Some("Pads/Warm Pad.fxp"));
+}
+
+#[test]
+fn fixed_mode_auditions_only_by_space_outside_the_search_field() {
+    let mut select = fixed();
+    // 候補移動では Preview を返さない。候補の変化は host が selected() で検出する。
+    assert_eq!(
+        select.handle_key(press(KeyCode::Down)),
+        PatchSelectAction::Continue
+    );
+    assert_eq!(
+        select.handle_key(press(KeyCode::Char(' '))),
+        PatchSelectAction::PlayLine("Kits/909.sfz".to_string())
+    );
+    select.handle_key(press(KeyCode::Char('/')));
+    assert_eq!(
+        select.handle_key(press(KeyCode::Char(' '))),
+        PatchSelectAction::Continue,
+        "Space while editing goes to the query"
+    );
+    assert_eq!(text_input::textarea_value(select.query_textarea()), " ");
+    select.handle_key(press(KeyCode::Esc));
+    assert!(!select.filter_editing());
+    select.handle_key(press(KeyCode::Home));
+    assert_eq!(
+        select.handle_key(press(KeyCode::Char(' '))),
+        PatchSelectAction::PlayLine("Drums/Full Drums.sfz".to_string())
+    );
 }
 
 #[test]

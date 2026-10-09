@@ -139,6 +139,9 @@ impl<'a> TuiApp<'a> {
             }
             self.pump_chord_chart_preview();
             self.pump_mml_overlay();
+            if self.active_screen == PrimaryScreen::DrumSequencer {
+                self.pump_drum_sequencer_auto_play();
+            }
             self.pump_notepad_sound_check_guide();
             self.pump_notepad_waits();
             clear_terminal_for_new_screen(&mut terminal, &mut rendered_screen, self.active_screen)?;
@@ -197,7 +200,7 @@ impl<'a> TuiApp<'a> {
                         input_timing.key_received(&key, self.active_screen);
                     }
                     if self.active_screen == PrimaryScreen::DrumSequencer
-                        && self.drum_sequencer.selector_open()
+                        && self.drum_sequencer.captures_keys()
                     {
                         self.dispatch_drum_sequencer_key_event(key);
                         continue;

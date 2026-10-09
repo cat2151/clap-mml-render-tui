@@ -8,3 +8,5 @@ cmrt-tui-core = { path = "../tui-core" }
 # キー入力と描画は既存の screen crate と同じ版を使う。
 crossterm = "0.29"
 ratatui = "0.30"
+# pattern の保存形式。他の crate と同じ版を使う。
+midly = "0.5"

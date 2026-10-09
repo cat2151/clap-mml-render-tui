@@ -2,6 +2,7 @@
 //!
 //! 逆向き（history → 画面）は [`super::restore`]。
 
+use super::drum_sequencer::drum_session_to_history;
 use super::grid_sequencer::grid_session_to_history;
 use crate::tui::TuiApp;
 
@@ -34,6 +35,7 @@ impl TuiApp<'_> {
             grid_sequencer_track_count: self.grid_sequencer.track_count(),
             grid_sequencer_chord_mode: self.grid_sequencer.chord_enabled(),
             grid_sequencer: grid_session_to_history(self.grid_sequencer.session_state()),
+            drum_sequencer: drum_session_to_history(&self.drum_sequencer.screen),
             grid_sequencer_bpm: self.grid_sequencer.bpm_mode().manual(),
             loop_browser_bpm: self.loop_browser.state.bpm_mode().manual(),
             grid_sequencer_bpm_range: bpm_range_to_history(

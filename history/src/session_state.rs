@@ -38,6 +38,9 @@ pub struct SessionState {
     /// 人間が編集した Grid Sequencer の行と AUTO / HOLD 状態。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub grid_sequencer: Option<crate::GridSequencerSessionState>,
+    /// Drum Sequencer の kit・入力・カーソル。再生状態は持たない。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drum_sequencer: Option<crate::DrumSequencerSessionState>,
     /// Grid Sequencer の手動BPM。`None` は既定の自動（BPM130）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub grid_sequencer_bpm: Option<f64>,
@@ -94,6 +97,7 @@ impl Default for SessionState {
             grid_sequencer_track_count: cmrt_realtime_play::DEFAULT_LIVE_INSTANCE_COUNT,
             grid_sequencer_chord_mode: false,
             grid_sequencer: None,
+            drum_sequencer: None,
             grid_sequencer_bpm: None,
             loop_browser_bpm: None,
             grid_sequencer_bpm_range: None,
@@ -126,6 +130,8 @@ struct SessionStateWire {
     grid_sequencer_chord_mode: bool,
     #[serde(default, deserialize_with = "deserialize_grid_sequencer")]
     grid_sequencer: Option<crate::GridSequencerSessionState>,
+    #[serde(default, deserialize_with = "deserialize_drum_sequencer")]
+    drum_sequencer: Option<crate::DrumSequencerSessionState>,
     #[serde(default)]
     grid_sequencer_bpm: Option<f64>,
     #[serde(default)]
@@ -179,6 +185,7 @@ impl<'de> serde::Deserialize<'de> for SessionState {
             ),
             grid_sequencer_chord_mode: wire.grid_sequencer_chord_mode,
             grid_sequencer: wire.grid_sequencer,
+            drum_sequencer: wire.drum_sequencer,
             grid_sequencer_bpm: valid_saved_bpm(wire.grid_sequencer_bpm),
             loop_browser_bpm: valid_saved_bpm(wire.loop_browser_bpm),
             grid_sequencer_bpm_range: valid_saved_bpm_range(wire.grid_sequencer_bpm_range),
@@ -218,6 +225,17 @@ fn default_chord_chart_bass_enabled() -> bool {
 fn deserialize_grid_sequencer<'de, D>(
     deserializer: D,
 ) -> Result<Option<crate::GridSequencerSessionState>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    Ok(serde_json::from_value(value).ok())
+}
+
+/// 形の合わない drum 項目は未保存として読む。他の画面の状態は巻き込まない。
+fn deserialize_drum_sequencer<'de, D>(
+    deserializer: D,
+) -> Result<Option<crate::DrumSequencerSessionState>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {

@@ -32,16 +32,11 @@ fn fixed_kit_mode_shows_only_available_controls_and_fixed_panes() {
         "/:編集",
         "Enter:kit",
         "Esc:取消",
+        "?:help",
     ] {
         assert!(text.contains(available), "missing {available}");
     }
-    for unavailable in [
-        "Space:試聴",
-        "plugin solo/mute",
-        "演奏設定",
-        "A:add",
-        "R:random",
-    ] {
+    for unavailable in ["plugin solo/mute", "演奏設定", "A:add", "R:random"] {
         assert!(!text.contains(unavailable), "unexpected {unavailable}");
     }
 }
