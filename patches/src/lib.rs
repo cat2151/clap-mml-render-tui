@@ -11,6 +11,9 @@ mod layout;
 mod naming;
 mod roles;
 
+pub use clap_mml_play_server_core::patch_state_prepare::{
+    prepare_catalog_clap_patch_state, prepare_native_clap_patch_state, supports_catalog_clap_plugin,
+};
 /// Host-independent Surge XT CLAP state preparation shared with play-server.
 pub use clap_mml_play_server_core::{prepare_clap_patch_state, PatchStateError};
 
