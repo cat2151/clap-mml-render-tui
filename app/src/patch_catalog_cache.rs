@@ -273,7 +273,8 @@ pub fn load() -> Result<LoadedPatchCatalogCache> {
     load_from(&path)
 }
 
-pub(crate) fn load_from(path: &Path) -> Result<LoadedPatchCatalogCache> {
+/// `load()` と同じ検査で、指定したパスの catalog を読む。
+pub fn load_from(path: &Path) -> Result<LoadedPatchCatalogCache> {
     let bytes = fs::read(path)
         .with_context(|| format!("patch catalog cacheを読めません: {}", path.display()))?;
     let value: serde_json::Value = serde_json::from_slice(&bytes)
