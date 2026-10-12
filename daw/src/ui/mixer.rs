@@ -2,7 +2,7 @@ use ratatui::{layout::Rect, Frame};
 
 use super::super::{DawApp, FIRST_PLAYABLE_TRACK};
 use super::patch_display;
-use cmrt_tui_core::mixer_overlay::{draw_mixer_overlay, MixerOverlayTrack};
+use cmrt_tui_core::mixer_overlay::{draw_mixer_overlay_with_hint, MixerOverlayTrack};
 
 pub(super) fn draw_mixer(frame: &mut Frame<'_>, app: &DawApp, area: Rect) {
     // role 表示に使う catalog。1 描画につき 1 回だけ lock を取る（track ごとに取らない）。
@@ -24,7 +24,7 @@ pub(super) fn draw_mixer(frame: &mut Frame<'_>, app: &DawApp, area: Rect) {
             }
         })
         .collect::<Vec<_>>();
-    draw_mixer_overlay(
+    draw_mixer_overlay_with_hint(
         frame,
         area,
         &tracks,
@@ -32,5 +32,6 @@ pub(super) fn draw_mixer(frame: &mut Frame<'_>, app: &DawApp, area: Rect) {
             .mixer
             .cursor_track
             .saturating_sub(FIRST_PLAYABLE_TRACK),
+        "h/l: track  j/k: -/+3dB  m/ESC: close  x: effects chain",
     );
 }

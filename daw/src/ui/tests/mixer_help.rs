@@ -27,6 +27,11 @@ fn mixer_keys_are_only_in_the_mixer_help() {
     assert!(mixer_help.contains("MIXERoverlay(m)"), "{mixer_help}");
     assert!(mixer_help.contains("?:ヘルプ(このページ)"), "{mixer_help}");
     assert!(mixer_help.contains("j/k,↓/↑:volume-/+3dB"), "{mixer_help}");
+    assert!(mixer_help.contains("m/ESC:閉じる"), "{mixer_help}");
+    assert!(
+        mixer_help.contains("x:選択trackのEFFECTSCHAINoverlayを開く"),
+        "{mixer_help}"
+    );
     assert!(
         !mixer_help.contains("Shift+H:historyoverlay"),
         "{mixer_help}"

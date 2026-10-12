@@ -135,7 +135,8 @@ pub(super) fn draw_help(
             Line::from("  ?        : ヘルプ (このページ)"),
             Line::from("  h/l, ←/→ : track 移動"),
             Line::from("  j/k, ↓/↑ : volume -/+3dB"),
-            Line::from("  ESC      : 閉じる"),
+            Line::from("  x        : 選択 track の EFFECTS CHAIN overlay を開く"),
+            Line::from("  m / ESC  : 閉じる"),
             Line::from(""),
             Line::from(Span::styled(
                 "  [ESC] で戻る",

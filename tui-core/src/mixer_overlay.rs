@@ -132,6 +132,23 @@ pub fn draw_mixer_overlay(
     tracks: &[MixerOverlayTrack],
     selected_track: usize,
 ) {
+    draw_mixer_overlay_with_hint(
+        frame,
+        area,
+        tracks,
+        selected_track,
+        "h/l: track  j/k: -/+3dB  ESC: close",
+    );
+}
+
+/// 呼び出し元が対応するキー操作をヒントに表示する。
+pub fn draw_mixer_overlay_with_hint(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    tracks: &[MixerOverlayTrack],
+    selected_track: usize,
+    hint: &str,
+) {
     let popup = centered_rect(92, 76, area);
     frame.render_widget(Clear, popup);
 
@@ -245,8 +262,7 @@ pub fn draw_mixer_overlay(
         String::new()
     };
     frame.render_widget(
-        Paragraph::new(format!("h/l: track  j/k: -/+3dB  ESC: close{range_hint}"))
-            .style(Style::default().fg(MONOKAI_GRAY)),
+        Paragraph::new(format!("{hint}{range_hint}")).style(Style::default().fg(MONOKAI_GRAY)),
         chunks[3],
     );
 }

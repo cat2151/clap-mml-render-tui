@@ -95,6 +95,9 @@ fn draw_shows_mixer_overlay_with_track_labels_and_db_values() {
         "lines: {:?}",
         normalized_lines
     );
+    assert!(normalized_lines
+        .iter()
+        .any(|line| { line.contains("m/esc: close") && line.contains("x: effects chain") }));
     assert!(
         normalized_lines
             .iter()

@@ -21,7 +21,11 @@ impl DawApp {
     /// `x`: cursor track の EFFECT CHAIN overlay を開く。演奏 track 以外では開かない。
     /// 演奏中なら止める（演奏中の preview は鳴らさないため）。
     pub(crate) fn start_effect_chain_overlay(&mut self) {
-        let track = self.editor.cursor_track;
+        self.start_effect_chain_overlay_for_track(self.editor.cursor_track);
+    }
+
+    /// mixer など、grid と異なる track 選択からも同じ編集・試聴処理を使う。
+    pub(crate) fn start_effect_chain_overlay_for_track(&mut self, track: usize) {
         if track < FIRST_PLAYABLE_TRACK {
             self.append_log_line(message::PLAYABLE_TRACK_ONLY);
             return;

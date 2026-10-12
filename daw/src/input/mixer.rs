@@ -11,8 +11,11 @@ impl DawApp {
 
     pub(crate) fn handle_mixer(&mut self, key: KeyCode) {
         match key {
-            KeyCode::Esc => {
+            KeyCode::Esc | KeyCode::Char('m') => {
                 self.mode = DawMode::Normal;
+            }
+            KeyCode::Char('x') => {
+                self.start_effect_chain_overlay_for_track(self.overlays.mixer.cursor_track);
             }
             KeyCode::Char('?') => self.enter_help(),
             KeyCode::Char('h') | KeyCode::Left

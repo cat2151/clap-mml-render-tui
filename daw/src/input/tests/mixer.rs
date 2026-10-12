@@ -1,6 +1,64 @@
 use super::*;
 
 #[test]
+fn m_toggles_the_mixer_closed() {
+    let (mut app, _cache_rx) = build_test_app();
+
+    app.handle_normal(KeyCode::Char('m'));
+    assert_eq!(app.mode, DawMode::Mixer);
+
+    app.handle_mixer(KeyCode::Char('m'));
+    assert_eq!(app.mode, DawMode::Normal);
+}
+
+#[test]
+fn x_opens_and_commits_the_mixer_selected_tracks_chain() {
+    let (_temp, _env_guard) = temp_local_dirs("daw_cache");
+    let (mut app, _cache_rx) = build_test_app();
+    app.effect_plugins =
+        cmrt_offline_render::EffectPlugins::with_catalog(cmrt_core::AudioEffectCatalog::default());
+    app.editor.cursor_track = 2;
+    app.editor.data[2][0] = r#"{"Surge XT patch":"Grid.fxp"}"#.to_string();
+    app.editor.data[3][0] =
+        r#"{"Surge XT patch":"Mixer.fxp","effects after instrument":[{"Test FX preset":"Echo"}]}"#
+            .to_string();
+    let grid_init = app.editor.data[2][0].clone();
+
+    app.handle_normal(KeyCode::Char('m'));
+    app.handle_mixer(KeyCode::Char('l'));
+    app.handle_mixer(KeyCode::Char('x'));
+
+    assert_eq!(app.mode, DawMode::EffectChain);
+    assert_eq!(app.overlays.effect_chain.track, 3);
+    assert_eq!(app.overlays.effect_chain.instrument, "Mixer.fxp");
+    assert_eq!(
+        app.overlays.effect_chain.editor.chain,
+        vec![serde_json::json!({"Test FX preset": "Echo"})]
+    );
+    assert_eq!(app.editor.cursor_track, 2);
+
+    app.overlays.effect_chain.editor.chain.clear();
+    app.handle_effect_chain(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+    assert_eq!(app.mode, DawMode::Normal);
+    assert_eq!(app.editor.data[3][0], r#"{"Surge XT patch":"Mixer.fxp"}"#);
+    assert_eq!(app.editor.data[2][0], grid_init);
+}
+
+#[test]
+fn x_without_an_effect_catalog_keeps_the_mixer_open() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.handle_normal(KeyCode::Char('m'));
+    app.handle_mixer(KeyCode::Char('x'));
+
+    assert_eq!(app.mode, DawMode::Mixer);
+    assert_eq!(
+        app.log_lines.lock().unwrap().back().map(String::as_str),
+        Some(cmrt_effect_chain_select::messages::NOT_AVAILABLE_ON_THIS_BACKEND)
+    );
+}
+
+#[test]
 fn handle_mixer_supports_track_navigation_and_escape() {
     let (mut app, _cache_rx) = build_test_app();
     app.mode = DawMode::Mixer;
