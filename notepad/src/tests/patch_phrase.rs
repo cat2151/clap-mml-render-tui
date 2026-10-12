@@ -68,7 +68,7 @@ fn handle_patch_phrase_space_replays_current_preview() {
 }
 
 #[test]
-fn handle_patch_phrase_i_from_history_enters_insert_with_preview_mml() {
+fn handle_patch_phrase_i_from_history_requests_line_edit_with_preview_mml() {
     let mut app = NotepadScreen::new_for_test(test_config());
     app.editor.lines = vec!["before".to_string()];
     app.patch_phrase_store.patches.insert(
@@ -80,16 +80,13 @@ fn handle_patch_phrase_i_from_history_enters_insert_with_preview_mml() {
     );
     app.start_patch_phrase("Pads/Pad 1.fxp".to_string());
 
-    app.handle_patch_phrase(KeyCode::Char('i'));
+    let action = app.handle_key_event(KeyEvent::new(KeyCode::Char('i'), KeyModifiers::NONE));
 
-    assert!(matches!(app.mode, Mode::Insert));
+    assert!(matches!(action, NormalAction::EditLine));
+    assert!(matches!(app.mode, Mode::Normal));
     assert_eq!(
         app.editor.lines,
         vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()]
-    );
-    assert_eq!(
-        app.editor.textarea.lines().join(""),
-        r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#
     );
 }
 

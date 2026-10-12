@@ -54,6 +54,40 @@ fn handle_insert_ctrl_c_copies_selected_text() {
 }
 
 #[test]
+fn handle_insert_ctrl_x_cuts_selected_text_to_the_os_clipboard() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.mode = DawMode::Insert;
+    app.textarea = TextArea::from(["Hello World"]);
+    let _ = cmrt_tui_core::clipboard::take_text_for_test();
+    app.textarea.move_cursor(CursorMove::WordForward);
+    app.textarea.start_selection();
+    app.textarea.move_cursor(CursorMove::End);
+
+    app.handle_insert(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL));
+
+    assert_eq!(app.textarea.lines().join(""), "Hello ");
+    assert_eq!(
+        cmrt_tui_core::clipboard::take_text_for_test(),
+        Some("World".to_string())
+    );
+}
+
+/// 他のアプリでコピーした文字列も貼れる。セルは 1 行なので先頭の 1 行だけ。
+#[test]
+fn handle_insert_ctrl_v_pastes_the_first_line_of_the_os_clipboard() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.mode = DawMode::Insert;
+    app.textarea = TextArea::from(["o4"]);
+    app.textarea.move_cursor(CursorMove::End);
+    cmrt_tui_core::clipboard::set_text("cde\nefg".to_string());
+
+    app.handle_insert(KeyEvent::new(KeyCode::Char('v'), KeyModifiers::CONTROL));
+
+    assert_eq!(app.textarea.lines().join(""), "o4cde");
+    let _ = cmrt_tui_core::clipboard::take_text_for_test();
+}
+
+#[test]
 fn commit_insert_triggers_cache_refresh_when_text_changes() {
     let tmp = cmrt_history::test_support::unique_test_dir("commit_insert_refreshes_cache");
 

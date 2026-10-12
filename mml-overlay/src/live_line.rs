@@ -3,11 +3,8 @@
 //! 画面の試聴と CLI の計測（`cmrt live-line-check`）が同じ行を同じ形で送るよう、
 //! 変換はここ 1 か所に置く。
 
-use clap_mml_play_server_core::EFFECT_CHAIN_JSON_KEY;
-use mmlabc_to_smf::mml_preprocessor::extract_embedded_json;
-
 use crate::line_play::{line_events, LineProgram, LineStatus};
-use crate::patch_json::{patch_name, strip_patch_json};
+use crate::patch_json::{effect_chain_json, patch_name, strip_patch_json};
 use crate::LivePatch;
 
 /// [`crate::MmlOverlaySender::play_line`] へそのまま渡せる 1 行。
@@ -33,19 +30,6 @@ pub fn live_line(source: &str) -> Result<LiveLine, String> {
         patch: LivePatch::with_effect_chain(patch.as_deref(), &effect_chain_json(source)?),
         program: LineProgram::once(performance),
     })
-}
-
-/// 行頭 JSON の `"effects after instrument"` の値を JSON 文字列で返す。無ければ空。
-fn effect_chain_json(source: &str) -> Result<String, String> {
-    let Some(json) = extract_embedded_json(source).embedded_json else {
-        return Ok(String::new());
-    };
-    let value: serde_json::Value = serde_json::from_str(&json)
-        .map_err(|error| format!("行頭 JSON を読めません: {error}: {json}"))?;
-    match value.get(EFFECT_CHAIN_JSON_KEY) {
-        Some(chain) => serde_json::to_string(chain).map_err(|error| error.to_string()),
-        None => Ok(String::new()),
-    }
 }
 
 #[cfg(test)]

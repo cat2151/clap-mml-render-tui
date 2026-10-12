@@ -392,7 +392,7 @@ fn notepad_normal_mode_active_is_false_on_other_screens_and_submodes() {
     let mut app = TuiApp::new_for_test(test_config());
     assert!(app.notepad_normal_mode_active());
 
-    app.notepad.mode = Mode::Insert;
+    app.notepad.mode = Mode::Help;
     assert!(!app.notepad_normal_mode_active());
     app.notepad.mode = Mode::Normal;
 

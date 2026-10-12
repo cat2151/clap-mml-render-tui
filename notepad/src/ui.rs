@@ -10,10 +10,10 @@ mod status;
 mod syntax;
 
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
+    widgets::{Block, Borders, List, ListItem, Paragraph},
     Frame,
 };
 
@@ -31,7 +31,6 @@ use status::{
 // LIST_HIGHLIGHT_SYMBOL は画面横断で共有するため `cmrt-tui-core` へ切り出した。
 use cmrt_tui_core::status::LIST_HIGHLIGHT_SYMBOL;
 
-const LIST_HIGHLIGHT_WIDTH: u16 = 2;
 /// 経過秒の表示上限。印の幅（4 セル）に収める。
 const MAX_SHOWN_RENDER_SECS: u64 = 999;
 
@@ -146,7 +145,6 @@ fn draw_normal(
     status_color: Color,
     mode: Mode,
 ) {
-    let is_insert = mode == Mode::Insert;
     let cursor = app.editor.cursor;
     let mut status = normal_status_text(&mode, play_state);
     if app.patch_select_open_pending() {
@@ -192,19 +190,12 @@ fn draw_normal(
             let render_status = (!cached)
                 .then(|| app.render_job_status_for_mml(line))
                 .flatten();
-            // INSERT 時のカーソル行は textarea で別描画するため、
-            // List 側は空文字にして重なり表示を防ぐ。
-            let content = if is_insert && i == cursor {
-                String::new()
-            } else {
-                line.clone()
-            };
             let mut spans = vec![Span::styled(cache_marker(cached, render_status), style)];
             // 選択行は必ず表示されるので、表示中の行はカーソルから表示高さ未満の距離にある。
             if i.abs_diff(cursor) < visible_height {
-                spans.extend(highlighted_spans(&content, style, i == cursor));
+                spans.extend(highlighted_spans(line, style, i == cursor));
             } else {
-                spans.push(Span::styled(content, style));
+                spans.push(Span::styled(line.clone(), style));
             }
             ListItem::new(Line::from(spans))
         })
@@ -226,28 +217,6 @@ fn draw_normal(
         list_area,
         &mut app.editor.list_state,
     );
-
-    // INSERTモード時は、カーソル行にインラインで textarea を描画する。
-    // List ウィジェットは Borders::ALL を持つため、内側の開始は +1 ずつオフセットする。
-    if is_insert {
-        let offset = app.editor.list_state.offset();
-        if cursor >= offset {
-            let row_in_visible = (cursor - offset) as u16;
-            let inner_top = list_area.y + 1; // 上ボーダーの内側（1行分）
-            let inner_bottom = list_area.y + list_area.height.saturating_sub(1); // 下ボーダーの位置
-            let textarea_y = inner_top + row_in_visible;
-            if textarea_y < inner_bottom {
-                let textarea_area = Rect {
-                    x: list_area.x + 1 + LIST_HIGHLIGHT_WIDTH,
-                    y: textarea_y,
-                    width: list_area.width.saturating_sub(2 + LIST_HIGHLIGHT_WIDTH),
-                    height: 1,
-                };
-                f.render_widget(Clear, textarea_area);
-                f.render_widget(&app.editor.textarea, textarea_area);
-            }
-        }
-    }
 
     f.render_widget(
         Paragraph::new(status).style(base_style().fg(status_color)),

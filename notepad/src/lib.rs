@@ -68,7 +68,6 @@ use cache::{mark_cache_entry_recent, resolve_cached_samples, try_insert_cache};
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Mode {
     Normal,
-    Insert,
     PatchSelect,
     NotepadHistory,
     NotepadHistoryGuide,
@@ -88,6 +87,8 @@ pub enum NormalAction {
     LaunchKeyboard,
     LaunchLoopBrowser,
     EditConfig,
+    /// カーソル行を共有 MML overlay で編集する。notepad は入力欄を持たない。
+    EditLine,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -144,7 +145,7 @@ pub(crate) fn truncate_for_log(value: &str, max_chars: usize) -> String {
 pub struct NotepadScreen<'a> {
     pub mode: Mode,
     pub help_origin: Mode,
-    pub(crate) editor: NotepadEditorState<'a>,
+    pub(crate) editor: NotepadEditorState,
     pub(crate) playback: TuiPlaybackRuntime,
     pub(crate) audio: NotepadAudioCache,
     pub(crate) sound_check_guide: SoundCheckGuide,
@@ -173,6 +174,8 @@ pub struct NotepadScreen<'a> {
     pub(crate) effect_plugins: cmrt_offline_render::EffectPlugins,
     /// EFFECT CHAIN overlay が編集しているカーソル行の chain の写し。
     pub(crate) effect_chain: cmrt_effect_chain_select::EffectChainEditor,
+    /// カーソル行の編集を app へ依頼するか。キー 1 つの処理の終わりに `EditLine` へ変わる。
+    pub(crate) line_edit_requested: bool,
 }
 
 /// [`NotepadScreen::new`] の引数一式。
@@ -255,7 +258,7 @@ impl NotepadScreen<'static> {
 
 impl<'a> NotepadScreen<'a> {
     fn from_parts(
-        editor: NotepadEditorState<'a>,
+        editor: NotepadEditorState,
         playback: TuiPlaybackRuntime,
         sound_check_guide: SoundCheckGuide,
         patch_load_state: Arc<Mutex<PatchLoadState>>,
@@ -284,6 +287,7 @@ impl<'a> NotepadScreen<'a> {
             cfg,
             effect_plugins: cmrt_offline_render::EffectPlugins::none(),
             effect_chain: Default::default(),
+            line_edit_requested: false,
         }
     }
 
@@ -399,7 +403,6 @@ impl<'a> NotepadScreen<'a> {
 
     pub fn uses_textarea_cursor(&self) -> bool {
         match self.mode {
-            Mode::Insert => true,
             Mode::PatchSelect => self
                 .patch_select
                 .as_ref()

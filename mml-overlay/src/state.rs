@@ -10,6 +10,7 @@
 
 mod audition;
 mod chord_transfer;
+mod clipboard;
 mod contract;
 mod history;
 mod patch;
@@ -243,7 +244,7 @@ impl<'a> MmlOverlay<'a> {
             return self.play_current_line(PatchChange::Keep);
         }
         let DataCursor(previous_row, _) = self.textarea.cursor();
-        self.textarea.input(key);
+        self.input_textarea(key);
         // 行が変われば、その行をまるごと鳴らす。上下キーだけでなく、改行や
         // 行頭での backspace でも同じ扱いになる。
         if self.cursor_row() != previous_row {

@@ -49,7 +49,7 @@ fn notepad_same_day_sound_check_replaces_footer() {
 fn notepad_sound_check_overlay_is_hidden_outside_normal_mode() {
     let mut app = NotepadScreen::new_for_test(test_config());
     set_notepad_guide(&mut app, None);
-    app.mode = Mode::Insert;
+    app.mode = Mode::Help;
 
     let screen = render_lines(&mut app, 100, 24).join("\n").replace(' ', "");
     assert!(!screen.contains(NOTEPAD_SOUND_CHECK_GUIDE_MESSAGE));

@@ -30,6 +30,7 @@ mod keyboard_mml;
 mod keyboard_random_chord;
 mod mml_overlay;
 mod normal_mode;
+mod notepad_line_overlay;
 mod screen_switch;
 mod session;
 mod session_bpm;

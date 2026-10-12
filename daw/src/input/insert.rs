@@ -1,4 +1,4 @@
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent};
 
 use super::super::{DawApp, DawMode, DawPlayState};
 
@@ -42,23 +42,9 @@ impl DawApp {
     }
 
     pub(crate) fn handle_insert(&mut self, key_event: KeyEvent) {
-        if key_event.modifiers.contains(KeyModifiers::CONTROL) {
-            match key_event.code {
-                KeyCode::Char('c') => {
-                    self.textarea.copy();
-                    cmrt_tui_core::clipboard::set_text(self.textarea.yank_text().to_string());
-                    return;
-                }
-                KeyCode::Char('x') => {
-                    self.textarea.cut();
-                    return;
-                }
-                KeyCode::Char('v') => {
-                    self.textarea.paste();
-                    return;
-                }
-                _ => {}
-            }
+        // セルは 1 行なので、複数行は先頭の 1 行だけを貼る（MML overlay の 1 行モードと同じ）。
+        if cmrt_tui_core::clipboard::handle_textarea_key(&mut self.textarea, key_event, true) {
+            return;
         }
         match key_event.code {
             KeyCode::Esc => {

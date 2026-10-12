@@ -71,7 +71,11 @@ pub enum TuiExitReason {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::tui) enum MmlOverlayOwner {
     Global,
-    ChordChart { section_id: chord_chart::SectionId },
+    ChordChart {
+        section_id: chord_chart::SectionId,
+    },
+    /// notepad のカーソル行。overlay が開いている間は notepad へキーが届かず、行も動かない。
+    Notepad,
 }
 
 /// 画面ホスト。持つのは「どの画面か」と、画面をまたいで共有するものだけ。

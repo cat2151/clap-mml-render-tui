@@ -35,7 +35,6 @@ pub(super) fn render_status_text(render_status: &TuiRenderStatus) -> String {
 
 pub(super) fn normal_status_text(mode: &Mode, play_state: &PlayState) -> String {
     let mode = match mode {
-        Mode::Insert => "INSERT",
         Mode::Help => "HELP",
         _ => "NORMAL",
     };
@@ -45,7 +44,6 @@ pub(super) fn normal_status_text(mode: &Mode, play_state: &PlayState) -> String 
 pub(super) fn notepad_mode_title(mode: &Mode) -> &'static str {
     match mode {
         Mode::Normal => " [NORMAL] notepad mode ",
-        Mode::Insert => " [INSERT] notepad mode ",
         Mode::PatchSelect => " [PATCH SELECT] notepad mode ",
         Mode::NotepadHistory => " [HISTORY] notepad mode ",
         Mode::NotepadHistoryGuide => " [NORMAL] notepad mode ",
@@ -58,9 +56,8 @@ pub(super) fn notepad_mode_title(mode: &Mode) -> &'static str {
 pub(super) fn keybind_text(mode: &Mode) -> &'static str {
     match mode {
         Mode::Normal => {
-            "q ?:help e:config b:loops i:insert o/O:挿入 dd/Del:cut p/P:貼付 f:phrase g:generate r:ランダム音色 t:音色 x:effect Shift+H:patch history j/k・↑↓・PgUp/PgDn・Home/M:再生移動 Enter/Space w:DAW v:keyboard Ctrl+G:screens"
+            "q ?:help e:config b:loops i:編集 o/O:挿入 dd/Del:cut p/P:貼付 f:phrase g:generate r:ランダム音色 t:音色 x:effect Shift+H:patch history j/k・↑↓・PgUp/PgDn・Home/M:再生移動 Enter/Space w:DAW v:keyboard Ctrl+G:screens"
         }
-        Mode::Insert => "ESC:確定→NORMAL  Enter:確定→次行",
         Mode::PatchSelect => {
             "/:Regex検索  Enter:検索確定/決定  Space:再生  ESC:キャンセル  n/p/t:overlay切替  f:お気に入り  a:preset追加  r:ランダム  h/l・←/→:ペイン移動  j/k・↑↓・PgUp/PgDn・Home/End:移動して再生"
         }
@@ -80,7 +77,7 @@ pub(super) fn keybind_text(mode: &Mode) -> &'static str {
 pub(super) fn status_text(mode: &Mode, play_state: &PlayState) -> String {
     let play_str = play_status_suffix(play_state);
     match mode {
-        Mode::Normal | Mode::Insert | Mode::NotepadHistoryGuide | Mode::Help => {
+        Mode::Normal | Mode::NotepadHistoryGuide | Mode::Help => {
             normal_status_text(mode, play_state)
         }
         Mode::PatchSelect => format!("音色選択{}", play_str),

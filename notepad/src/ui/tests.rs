@@ -18,7 +18,6 @@ mod cursor_style;
 mod effect_chain;
 mod footer;
 mod help_screens;
-mod insert_screen;
 mod overlay_screens;
 mod sound_check_guide;
 

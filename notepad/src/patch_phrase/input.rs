@@ -406,7 +406,9 @@ impl<'a> NotepadScreen<'a> {
             KeyCode::Char('i') if self.patch_phrase.focus == PatchPhrasePane::History => {
                 if let Some(mml) = self.patch_phrase_preview_mml() {
                     self.editor.lines[self.editor.cursor] = mml;
-                    self.start_insert();
+                    self.flush_patch_phrase_store_if_dirty();
+                    self.mode = Mode::Normal;
+                    self.request_line_edit();
                 }
             }
             KeyCode::Char('f') => {

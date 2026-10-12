@@ -41,19 +41,20 @@ fn t_while_the_catalog_is_loading_opens_patch_select_once_loaded() {
     );
 }
 
-/// 待っている間に INSERT へ入ったら、その操作を優先して勝手に開かない。
+/// 待っている間に行の編集（MML overlay）へ移ったら、その操作を優先して勝手に開かない。
+/// overlay は notepad のモードを変えないので、モードではなく依頼の時点で捨てる。
 #[test]
 fn pending_patch_select_is_dropped_if_the_user_moved_on() {
     let mut app = NotepadScreen::new_for_test(test_config());
     app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Loading));
     app.handle_normal(KeyCode::Char('t'));
-    app.mode = Mode::Insert;
+    app.handle_key_event(KeyEvent::new(KeyCode::Char('i'), KeyModifiers::NONE));
 
     *app.patch_load_state.lock().unwrap() =
         PatchLoadState::ready(make_patches(&["Pads/Pad 1.fxp"]));
     app.open_pending_patch_select_if_loaded();
 
-    assert!(matches!(app.mode, Mode::Insert));
+    assert!(matches!(app.mode, Mode::Normal));
     assert!(!app.patch_select_open_pending());
 }
 

@@ -4,8 +4,9 @@
 //! `Ctrl+T` で別に持つ）。ここが要るのは履歴からフレーズを取り込むときで、notepad が
 //! 書いた `{"Surge XT patch": "..."} cde` を音色と MML 本体へ分けるために使う。
 //!
-//! 既にある JSON に他のキーが入っていても、ここでは patch キーだけを見て残りは捨てる。
+//! 既にある JSON に他のキーが入っていても、[`patch_name`] は patch キーだけを見て残りは捨てる。
 
+use clap_mml_play_server_core::EFFECT_CHAIN_JSON_KEY;
 use mmlabc_to_smf::mml_preprocessor;
 
 /// notepad 画面と共通の JSON キー。
@@ -32,6 +33,19 @@ pub fn patch_name(text: &str) -> Option<String> {
         .get(PATCH_JSON_KEY)?
         .as_str()
         .map(str::to_string)
+}
+
+/// 行頭 JSON の `"effects after instrument"` の値を JSON 文字列で返す。無ければ空。
+pub fn effect_chain_json(text: &str) -> Result<String, String> {
+    let Some(json) = mml_preprocessor::extract_embedded_json(text).embedded_json else {
+        return Ok(String::new());
+    };
+    let value: serde_json::Value = serde_json::from_str(&json)
+        .map_err(|error| format!("行頭 JSON を読めません: {error}: {json}"))?;
+    match value.get(EFFECT_CHAIN_JSON_KEY) {
+        Some(chain) => serde_json::to_string(chain).map_err(|error| error.to_string()),
+        None => Ok(String::new()),
+    }
 }
 
 #[cfg(test)]

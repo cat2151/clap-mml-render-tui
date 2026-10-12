@@ -2,6 +2,7 @@ mod audition;
 mod chord_chart;
 mod chord_input;
 mod chord_transfer;
+mod clipboard;
 mod history;
 mod line;
 mod patch;

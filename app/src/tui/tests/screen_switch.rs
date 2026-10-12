@@ -147,7 +147,7 @@ fn q_quits_from_the_grid_sequencer_screen() {
 #[test]
 fn menu_is_unavailable_in_non_normal_states() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.notepad.mode = Mode::Insert;
+    app.notepad.mode = Mode::Help;
     assert!(!app.try_open_screen_switch_menu(ctrl_g()));
 
     app.active_screen = crate::screen_switch::PrimaryScreen::LoopBrowser;

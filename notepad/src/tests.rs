@@ -1,10 +1,8 @@
 pub(super) use super::*;
 pub(super) use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-pub(super) use ratatui_textarea::{CursorMove, TextArea};
 pub(super) use std::sync::atomic::{AtomicUsize, Ordering};
 
 mod filter_cache;
-mod insert_mode;
 mod normal_mode;
 mod notepad_history;
 mod notepad_history_persistence;

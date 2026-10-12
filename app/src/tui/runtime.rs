@@ -397,6 +397,7 @@ impl<'a> TuiApp<'a> {
                         }
                         NormalAction::LaunchKeyboard => self.start_keyboard_from_notepad(),
                         NormalAction::LaunchLoopBrowser => self.begin_loop_browser_startup(),
+                        NormalAction::EditLine => self.open_notepad_line_overlay(),
                         NormalAction::EditConfig => {
                             let session = self.playback_session.begin();
                             self.playback_session

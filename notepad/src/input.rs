@@ -1,6 +1,7 @@
 //! TUI のキー入力処理
 
 mod effect_chain;
+mod line_edit;
 mod patch_select;
 
 #[cfg(test)]
@@ -17,10 +18,20 @@ impl<'a> NotepadScreen<'a> {
     ///
     /// 画面の切替や config 編集など、共有ランタイム側でしか行えない操作は
     /// [`NormalAction`] として呼び出し元（`tui::runtime`）へ返す。
+    ///
+    /// 行の編集（`i` / `o` / `O` など）は入口がサブモードをまたぐので、どの経路で立った
+    /// 依頼もここ 1 か所で [`NormalAction::EditLine`] にする。
     pub fn handle_key_event(&mut self, key: crossterm::event::KeyEvent) -> NormalAction {
+        let action = self.dispatch_key_event(key);
+        if std::mem::take(&mut self.line_edit_requested) {
+            return NormalAction::EditLine;
+        }
+        action
+    }
+
+    fn dispatch_key_event(&mut self, key: crossterm::event::KeyEvent) -> NormalAction {
         match self.mode {
             Mode::Normal => return self.handle_normal_key_event(key),
-            Mode::Insert => self.handle_insert(key),
             Mode::PatchSelect => self.handle_patch_select(key),
             Mode::NotepadHistory => self.handle_notepad_history_key_event(key),
             Mode::PatchPhrase => self.handle_patch_phrase_key_event(key),
@@ -36,7 +47,6 @@ impl<'a> NotepadScreen<'a> {
     /// それ以外のモードでは何もせず、終了などに解釈しない。
     pub fn handle_ctrl_c(&mut self, key: crossterm::event::KeyEvent) {
         match self.mode {
-            Mode::Insert => self.handle_insert(key),
             Mode::PatchSelect
                 if self
                     .patch_select
@@ -166,7 +176,7 @@ impl<'a> NotepadScreen<'a> {
                     KeyCode::Char('v') => return NormalAction::LaunchKeyboard,
                     KeyCode::Char('e') => return NormalAction::EditConfig,
                     KeyCode::Char('b') => return NormalAction::LaunchLoopBrowser,
-                    KeyCode::Char('i') => self.start_insert(),
+                    KeyCode::Char('i') => self.request_line_edit(),
                     KeyCode::Char('g') => match self.insert_generated_line_above() {
                         Ok(()) => {}
                         Err(msg) => {
@@ -205,10 +215,10 @@ impl<'a> NotepadScreen<'a> {
                     KeyCode::Char('f') => self.start_patch_phrase_for_current_line(),
                     KeyCode::Char('x') => self.open_effect_chain_overlay(),
                     KeyCode::Char('o') => {
-                        self.insert_empty_line_and_start_insert(self.editor.cursor + 1);
+                        self.insert_empty_line_and_request_edit(self.editor.cursor + 1);
                     }
                     KeyCode::Char('O') => {
-                        self.insert_empty_line_and_start_insert(self.editor.cursor);
+                        self.insert_empty_line_and_request_edit(self.editor.cursor);
                     }
                     KeyCode::Delete => {
                         self.delete_current_line();
@@ -232,59 +242,5 @@ impl<'a> NotepadScreen<'a> {
             }
         }
         NormalAction::Continue
-    }
-
-    pub(super) fn handle_insert(&mut self, key_event: crossterm::event::KeyEvent) {
-        if key_event.modifiers.contains(KeyModifiers::CONTROL) {
-            match key_event.code {
-                KeyCode::Char('c') => {
-                    self.editor.textarea.copy();
-                    cmrt_tui_core::clipboard::set_text(
-                        self.editor.textarea.yank_text().to_string(),
-                    );
-                    return;
-                }
-                KeyCode::Char('x') => {
-                    self.editor.textarea.cut();
-                    return;
-                }
-                KeyCode::Char('v') => {
-                    self.editor.textarea.paste();
-                    return;
-                }
-                _ => {}
-            }
-        }
-        match key_event.code {
-            KeyCode::Esc => {
-                let text = self.editor.textarea.lines().join("");
-                self.editor.lines[self.editor.cursor] = text.clone();
-                self.mode = Mode::Normal;
-                if !text.trim().is_empty() {
-                    self.record_notepad_history(text.trim());
-                    self.record_patch_phrase_history(text.trim());
-                    self.play_mml(text.trim().to_string());
-                }
-            }
-            KeyCode::Enter => {
-                // 確定 → 非同期再生 → 次行挿入 → INSERT 継続
-                let text = self.editor.textarea.lines().join("");
-                self.editor.lines[self.editor.cursor] = text.clone();
-                if !text.trim().is_empty() {
-                    self.record_notepad_history(text.trim());
-                    self.record_patch_phrase_history(text.trim());
-                    self.play_mml(text.trim().to_string());
-                }
-                self.editor
-                    .lines
-                    .insert(self.editor.cursor + 1, String::new());
-                self.editor.cursor += 1;
-                self.editor.list_state.select(Some(self.editor.cursor));
-                self.editor.textarea = cmrt_tui_core::text_input::new_single_line_textarea("");
-            }
-            _ => {
-                self.editor.textarea.input(key_event);
-            }
-        }
     }
 }

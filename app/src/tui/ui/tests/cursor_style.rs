@@ -11,10 +11,6 @@ fn textarea_cursor_follows_the_active_screen() {
     let mut app = TuiApp::new_for_test(test_config());
     assert!(!app.uses_textarea_cursor());
 
-    // notepad の INSERT では textarea カーソルになる（判定は notepad crate へ委譲）。
-    app.notepad.mode = Mode::Insert;
-    assert!(app.uses_textarea_cursor());
-
     // loop browser の textarea は loop tree の `/` 絞り込み入力欄だけ。
     app.active_screen = crate::screen_switch::PrimaryScreen::LoopBrowser;
     assert!(!app.uses_textarea_cursor());

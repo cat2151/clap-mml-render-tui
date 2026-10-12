@@ -29,7 +29,7 @@ fn the_help_screen_shows_the_memory_usage_at_the_top() {
 }
 
 #[test]
-fn normal_help_screen_mentions_ctrl_clipboard_shortcuts_without_overlay_keybinds() {
+fn normal_help_screen_mentions_mml_overlay_line_edit_without_overlay_keybinds() {
     let mut app = NotepadScreen::new_for_test(test_config());
     app.mode = Mode::Help;
     app.help_origin = Mode::Normal;
@@ -41,16 +41,13 @@ fn normal_help_screen_mentions_ctrl_clipboard_shortcuts_without_overlay_keybinds
     assert!(screen.contains("[HELP] notepad mode"));
     assert!(normalized_lines
         .iter()
-        .any(|line| line.contains("Ctrl+C:コピー")));
+        .any(|line| line.contains("i:MMLoverlayで編集")));
     assert!(normalized_lines
         .iter()
         .any(|line| line.contains("K/?:ヘルプ(このページ)")));
     assert!(normalized_lines
         .iter()
-        .any(|line| line.contains("Ctrl+X:カット")));
-    assert!(normalized_lines
-        .iter()
-        .any(|line| line.contains("Ctrl+V:ペースト")));
+        .any(|line| line.contains("Enter:確定(再生)→次行挿入→編集継続")));
     assert!(normalized_lines
         .iter()
         .any(|line| line.contains("Shift+H:patchhistory")));

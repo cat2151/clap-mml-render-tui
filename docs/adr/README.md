@@ -7,6 +7,7 @@
 0016〜0019 は DAW の live 演奏と daily キャッシュ、0020〜0021 は chord chart 画面と auto voicing、
 0022 は DAW の effect chain、0023〜0024 は offline render の経路（render-server の実体と 1 経路化）、
 0025 は Guitar Articulation 画面で METAL-GTX の効かない操作を出さないこと、0026 はそのアルペジエーター overlay とメイン画面の線引き。
+0027 は先頭 JSON 付き MML を「;」でトラックに分けた形を扱わないこと。
 利用者向けの現行仕様は `README.ja.md` にある。
 
 ここに載っている実装はすべて完了済み。
@@ -43,18 +44,4 @@ play-server 側（プラグインの実測仕様・実行時の設計）は
 | [0024](0024-offline-render-goes-through-the-render-server-only.md) | offline render は render-server の 1 経路だけ。`cmrt.exe` は CLAP をロードしない |
 | [0025](0025-metal-gtx-unused-controls.md) | METAL-GTX の Stop_Key・「C0 を短く」・CC31・トリルへの CC28 は効かないので画面に出さない |
 | [0026](0026-arp-overlay-owns-what-to-play.md) | アルペジエーター overlay は素材とアルペジエーターの設定を自分で持ち、行全体のルール・アクセントはメイン画面と共有する |
-
-## 未解決として残している論点
-
-**patch → プラグインの判別規則を「拡張子で決める」ままにするか**（[0001](0001-patch-string-decides-the-plugin.md)）。
-踏み込むと display 文字列＝永続 ID が変わり、保存済みデータの移行が発生するため、いま踏み込まない。
-
-3 つめのプラグイン（Vaporizer2 / `.vvp`）はこの論点に触れたが、
-**固有拡張子があったので永続 ID を変えずに解けた**（`PatchForm` を 3 値へ広げただけ）。
-残っているのは「**同じ拡張子を扱うプラグインが 2 つ載る**」場合で、そのときは
-patch 文字列の形を変えるか、config で dir ごとにプラグインを明示するかの二択になる。
-
-**DAW の演奏で残している穴**は [0018](0018-page-replacement-clears-the-cache.md) の
-「塞いでいない穴」の表にまとめてある（Persistent 側の同型の穴 / WAV の長さ検証 /
-書き込み中の WAV / ループ長 5・9・13 のスロット余裕 0）。
-どれも「前日の音が混ざる」「モタる」「ぶつ切り」の説明ではない、独立した挙動。
+| [0027](0027-leading-json-with-semicolon-tracks-is-out-of-scope.md) | 先頭 JSON 付き MML を「;」でトラックに分けた形は扱わない（運用データに無いので、対応も報告もしない） |

@@ -2,7 +2,8 @@
 //!
 //! オーバーレイ自体は `cmrt-mml-overlay` crate に閉じている。ここが持つのは
 //! 「どの画面から開いてよいか」「開くときに何を止めるか」「鳴らす先はどこか」
-//! 「開くときに何のスナップショットを渡すか」の 4 つだけ。
+//! 「開くときに何のスナップショットを渡すか」の 4 つだけ。notepad の行編集の配線は
+//! [`notepad_line`] にある。
 
 use std::time::Instant;
 
@@ -75,12 +76,19 @@ impl TuiApp<'_> {
         self.open_owned_mml_overlay(MmlOverlayOwner::ChordChart { section_id }, context);
     }
 
-    /// owner の canonical patch を widget へ載せて、共有 overlay と sender を開く。
+    /// いまの画面の演奏を止めてから、[`Self::attach_owned_mml_overlay`] で開く。
     fn open_owned_mml_overlay(&mut self, owner: MmlOverlayOwner, context: MmlOverlayContext) {
         self.stop_active_screen_playback();
+        self.attach_owned_mml_overlay(owner, context);
+    }
+
+    /// owner の canonical patch を widget へ載せて、共有 overlay と sender を開く。
+    /// 開いたままの overlay を次の対象で開き直すときは、演奏を止めずにこれだけを呼ぶ。
+    fn attach_owned_mml_overlay(&mut self, owner: MmlOverlayOwner, context: MmlOverlayContext) {
         let patch = match owner {
             MmlOverlayOwner::Global => self.mml_overlay_patch.clone(),
             MmlOverlayOwner::ChordChart { .. } => self.chord_chart_patch.clone(),
+            MmlOverlayOwner::Notepad => notepad_line::line_patch(&self.notepad),
         };
         self.mml_overlay.set_restored_patch(patch);
         self.mml_overlay_owner = Some(owner);
@@ -218,14 +226,20 @@ impl TuiApp<'_> {
                 self.finish_owned_mml_overlay();
                 return;
             }
+            MmlOverlayAction::Commit {
+                ref line,
+                close: false,
+            } if self.mml_overlay_owner == Some(MmlOverlayOwner::Notepad) => {
+                self.advance_notepad_line_overlay(line);
+                return;
+            }
             _ => {}
         }
         let Some(sender) = &self.mml_overlay_sender else {
             return;
         };
         let command_id = match action {
-            // Commit は 1 行モードでしか返らない。app 側は複数行モードでしか
-            // 開かないのでここへは来ない（来ても sender へ用は無い）。
+            // 閉じない Commit は notepad の行編集だけが返し、上で処理済み。
             // TransferToChordRow も同じで、chord 行を持つのは DAW 画面だけ
             // （`MmlOverlayContext::chord_row_transfer` を立てていない）。
             MmlOverlayAction::Continue
@@ -268,6 +282,9 @@ impl TuiApp<'_> {
         };
         match chord_chart_role {
             Some(role) => self.chord_chart_live_patch(role, patch),
+            None if self.mml_overlay_owner == Some(MmlOverlayOwner::Notepad) => {
+                notepad_line::live_patch(&self.notepad, patch)
+            }
             None => LivePatch::new(patch),
         }
     }
@@ -279,14 +296,20 @@ impl TuiApp<'_> {
         match self.mml_overlay_owner {
             Some(MmlOverlayOwner::Global) => self.mml_overlay_patch = patch,
             Some(MmlOverlayOwner::ChordChart { .. }) => self.chord_chart_patch = patch,
-            None => {}
+            // notepad は行頭 JSON が正本で、確定時に書く。
+            Some(MmlOverlayOwner::Notepad) | None => {}
         }
     }
 
-    /// Modal 1 行編集の確定先を owner で振り分ける。
+    /// 閉じる 1 行編集の確定先を owner で振り分ける。
     fn commit_owned_mml_overlay_line(&mut self, line: &str) {
-        let Some(MmlOverlayOwner::ChordChart { section_id }) = self.mml_overlay_owner else {
-            return;
+        let section_id = match self.mml_overlay_owner {
+            Some(MmlOverlayOwner::ChordChart { section_id }) => section_id,
+            Some(MmlOverlayOwner::Notepad) => {
+                self.commit_notepad_line(line);
+                return;
+            }
+            Some(MmlOverlayOwner::Global) | None => return,
         };
         let line = line.trim();
         let Some(section) = self.chord_chart.song.section_mut(section_id) else {
@@ -342,6 +365,7 @@ fn chord_chart_patch_selector_role(key: KeyEvent) -> Option<PatchRole> {
 
 pub(in crate::tui) mod chord_chart_effect_chain;
 mod chord_chart_patch_select;
+mod notepad_line;
 
 #[cfg(test)]
 mod tests;

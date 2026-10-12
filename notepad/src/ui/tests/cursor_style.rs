@@ -17,15 +17,11 @@ fn normal_screen_cursor_uses_contrast_background_without_blink() {
 }
 
 #[test]
-fn insert_and_filter_modes_use_terminal_bar_cursor() {
+fn filter_modes_use_terminal_bar_cursor() {
     let mut app = NotepadScreen::new_for_test(test_config());
 
     assert!(!app.uses_textarea_cursor());
 
-    app.mode = Mode::Insert;
-    assert!(app.uses_textarea_cursor());
-
-    app.mode = Mode::Normal;
     crate::tests::open_patch_select_for_test(&mut app, "c", &["Pads/Pad 1.fxp"]);
     assert!(!app.uses_textarea_cursor());
     app.handle_patch_select(crossterm::event::KeyEvent::new(

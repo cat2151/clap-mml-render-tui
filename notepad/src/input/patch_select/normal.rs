@@ -186,20 +186,6 @@ impl<'a> NotepadScreen<'a> {
         Ok(Some(candidates[index].clone()))
     }
 
-    pub(crate) fn start_insert(&mut self) {
-        self.editor.textarea = cmrt_tui_core::text_input::new_single_line_textarea(
-            &self.editor.lines[self.editor.cursor],
-        );
-        self.mode = Mode::Insert;
-    }
-
-    pub(crate) fn insert_empty_line_and_start_insert(&mut self, index: usize) {
-        self.editor.lines.insert(index, String::new());
-        self.editor.cursor = index;
-        self.editor.list_state.select(Some(self.editor.cursor));
-        self.start_insert();
-    }
-
     pub(crate) fn delete_current_line(&mut self) {
         self.editor.yank_buffer = Some(self.editor.lines.remove(self.editor.cursor));
         if self.editor.lines.is_empty() {

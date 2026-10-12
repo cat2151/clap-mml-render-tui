@@ -26,3 +26,7 @@ crossterm = "0.29"
 ratatui = "0.30"
 ratatui-textarea = { version = "0.9", features = ["crossterm"] }
 regex = "1"
+
+[dev-dependencies]
+# Ctrl+C の書き込み先を実クリップボードでなくスタブにする。
+cmrt-tui-core = { path = "../tui-core", features = ["test-support"] }
