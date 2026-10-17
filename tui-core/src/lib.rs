@@ -15,6 +15,7 @@ pub mod memory;
 pub mod mixer;
 pub mod mixer_overlay;
 pub mod navigation;
+pub mod patch_catalog_cache;
 pub mod patch_load;
 pub mod patch_plugins;
 pub mod patches;
