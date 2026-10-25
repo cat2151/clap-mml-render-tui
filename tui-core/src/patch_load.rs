@@ -128,6 +128,14 @@ impl PatchCatalogSnapshot {
         self.role_presets = user_presets.to_vec();
     }
 
+    /// 表示名以外の根拠（実測など）で決めた category で、`index` の音色の category を上書きする。
+    /// 分類索引は変わらないので、呼んだ後に [`Self::rebuild_patch_roles`] で作り直すこと。
+    pub fn set_selector_category(&mut self, index: usize, category: &str) {
+        if let Some(patch) = self.audio_patches.get_mut(index) {
+            patch.selector_category = Some(category.to_string());
+        }
+    }
+
     /// server shared coreが解釈済みの、plugin key付きpatch情報。
     pub fn audio_patches(&self) -> &[cmrt_core::AudioPatch] {
         &self.audio_patches

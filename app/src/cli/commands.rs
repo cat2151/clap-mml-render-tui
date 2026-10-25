@@ -17,6 +17,12 @@ pub(super) enum Commands {
         #[arg(long)]
         force: bool,
     },
+    /// drum の percussion 行の音色を全部鳴らし、音高が鍵盤についてくるかの表を書く
+    BuildPitchTracking {
+        /// 表の書き出し先（JSON）
+        #[arg(long, value_name = "PATH")]
+        output: PathBuf,
+    },
     /// TUIが読むpatch catalog cacheを現在のconfigから再構築する
     BuildPatchCatalogCache,
     /// loop_dirs を走査して WAV ループキャッシュを再構築する

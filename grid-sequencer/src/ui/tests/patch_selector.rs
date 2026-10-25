@@ -281,7 +281,7 @@ fn the_kick_row_opens_in_the_drum_role_at_the_kick_preset() {
     let rendered = buffer_to_string(&wide_terminal(&screen));
 
     assert!(rendered.contains("▶ Drum tracks"), "{rendered}");
-    assert!(rendered.contains("▶ kick|bass drum"), "{rendered}");
+    assert!(rendered.contains("▶ kick"), "{rendered}");
 }
 
 #[test]

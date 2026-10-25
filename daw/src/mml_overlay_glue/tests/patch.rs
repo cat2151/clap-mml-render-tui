@@ -21,7 +21,7 @@ const UNCLASSIFIED_PATCH: &str = "Misc/Zzq Item.fxp";
 /// 確定先を選べるようにする。
 fn catalog_pairs() -> Vec<(String, String)> {
     [
-        "Pads/Snapshot Keys.fxp",
+        "Pads/Snapshot Keys Pad.fxp",
         "Pads/Snapshot Pad.fxp",
         UNCLASSIFIED_PATCH,
     ]
@@ -65,10 +65,10 @@ fn confirming_a_patch_writes_it_into_the_init_cell() {
 
     confirm_patch_by_query(&mut app, "snapshot keys");
 
-    assert_eq!(app.mml_overlay.patch(), Some("Pads/Snapshot Keys.fxp"));
+    assert_eq!(app.mml_overlay.patch(), Some("Pads/Snapshot Keys Pad.fxp"));
     assert_eq!(
         app.editor.data[2][0],
-        r#"{"Surge XT patch": "Pads/Snapshot Keys.fxp"}"#
+        r#"{"Surge XT patch": "Pads/Snapshot Keys Pad.fxp"}"#
     );
 }
 
@@ -108,7 +108,7 @@ fn confirming_a_patch_keeps_the_patch_filter_query() {
 
     assert_eq!(
         app.editor.data[2][0],
-        r#"{"Surge XT patch": "Pads/Snapshot Keys.fxp", "Surge XT patch filter": "snapshot"}"#,
+        r#"{"Surge XT patch": "Pads/Snapshot Keys Pad.fxp", "Surge XT patch filter": "snapshot"}"#,
         "音色名だけを差し替え、付随メタデータは壊さないこと"
     );
 }
@@ -143,7 +143,7 @@ fn the_confirmed_patch_survives_closing_the_overlay() {
     assert_eq!(app.mode, DawMode::Normal);
     assert_eq!(
         app.editor.data[2][0],
-        r#"{"Surge XT patch": "Pads/Snapshot Keys.fxp"}"#
+        r#"{"Surge XT patch": "Pads/Snapshot Keys Pad.fxp"}"#
     );
 }
 

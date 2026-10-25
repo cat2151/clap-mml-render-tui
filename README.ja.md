@@ -325,6 +325,7 @@ patches_dirs = ['D:\my\patches']
 - 行の用途（chord / bass / arpeggio / drum）で候補を絞るカテゴリ設定の既定値は、**プラグインごとに違います**。Surge XT は Surge のカテゴリ名、Vaporizer2 は Vaporizer2 のカテゴリ名、Dexed と組み込みに無いプラグインは「絞らない」（＝どの行も全 program が候補）です。Dexed の cartridge は「ディレクトリ名＝用途」ではないためで、組み込みに無いプラグインも音色置き場の体系が分からないので絞りません。変えたいときは `[plugins.<名前>]` に 7 項目を書いてください（生成される config.toml の末尾に、Surge XT の既定値をコメントで載せてあります）。
 - 用途別カテゴリ7項目も plugin profile の中だけに書きます。Surge XT 用なら `[plugins."Surge XT"]`、他のプラグイン用ならその plugin 自身の table に置きます。
 - 用途別の自動選択に使う mono/poly の共有判定データ（`voicing_shared_source` / `voicing_override_source`）は Surge XT の音色判定にだけ使います。
+- drum の percussion 欄の音色のうち、実測で note を変えると音高がついてくるもの（共有表 `cat-music-patterns/patch-pitch-tracking.json` で `tracks_keyboard` が true）は、plugin を問わず lead の `pitched percussion` 欄へ移します（名前で mallet・bell と分かる音色はその欄へ）。kick・snare・hi-hat 欄の音色は移しません。表は起動時に取得して `%LOCALAPPDATA%\clap-mml-render-tui\patch-catalog\patch-pitch-tracking.json` へ保存し、取得できなければ前回保存した表、それも無ければ移さずに一覧を出します。表は `cmrt build-pitch-tracking --output <PATH>` で作り直せます（1 音色ごとに clap-mml-play-server の `probe-pitch-tracking` を起動して測ります）。
 - レンダリング結果のキャッシュはプラグインごとに別ディレクトリへ置くので、混在しても別プラグインの音を誤利用しません（手で消す必要はありません）。置き場は次の2つで、`<プラグイン>` は解決済み `plugin_path` のファイル名（拡張子なし）です（Windows の場合）。
   - `%LOCALAPPDATA%\clap-mml-render-tui\notepad_cache\<プラグイン>\*.wav`（notepad / MML入力overlay のキャッシュ）
   - `%LOCALAPPDATA%\clap-mml-render-tui\daw_cache\<プラグイン>\*.wav`（DAW のトラックWAV）

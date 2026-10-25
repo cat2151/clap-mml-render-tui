@@ -269,7 +269,7 @@ dependencies = [
 [[package]]
 name = "cat-self-update-lib"
 version = "0.1.0"
-source = "git+https://github.com/cat2151/cat-self-update#52075f044b724a0b87ee562fd5c3a0c8924e56f9"
+source = "git+https://github.com/cat2151/cat-self-update#1beb5ab76fa34bbec048d454d263b8a1aef81429"
 
 [[package]]
 name = "cc"
@@ -497,7 +497,7 @@ dependencies = [
 [[package]]
 name = "cmrt-cache-player"
 version = "0.1.0"
-source = "git+https://github.com/cat2151/clap-mml-play-server#0a938db9bce30dfbc959ba9f9dd8638d9db4669a"
+source = "git+https://github.com/cat2151/clap-mml-play-server#31ae65f7e8af0af4954b7254383e37aaecd0e725"
 dependencies = [
  "clack-extensions",
  "clack-plugin",
@@ -535,7 +535,7 @@ dependencies = [
 [[package]]
 name = "cmrt-clack-timeline"
 version = "0.1.0"
-source = "git+https://github.com/cat2151/clap-mml-play-server#0a938db9bce30dfbc959ba9f9dd8638d9db4669a"
+source = "git+https://github.com/cat2151/clap-mml-play-server#31ae65f7e8af0af4954b7254383e37aaecd0e725"
 dependencies = [
  "clack-host",
  "cmrt-timeline",
@@ -553,7 +553,7 @@ dependencies = [
 [[package]]
 name = "cmrt-core"
 version = "0.1.0"
-source = "git+https://github.com/cat2151/clap-mml-play-server#0a938db9bce30dfbc959ba9f9dd8638d9db4669a"
+source = "git+https://github.com/cat2151/clap-mml-play-server#31ae65f7e8af0af4954b7254383e37aaecd0e725"
 dependencies = [
  "anyhow",
  "cat-self-update-lib",
@@ -846,6 +846,8 @@ version = "0.1.0"
 dependencies = [
  "cmrt-core",
  "regex",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -893,7 +895,7 @@ dependencies = [
 [[package]]
 name = "cmrt-server-config"
 version = "0.1.0"
-source = "git+https://github.com/cat2151/clap-mml-play-server#0a938db9bce30dfbc959ba9f9dd8638d9db4669a"
+source = "git+https://github.com/cat2151/clap-mml-play-server#31ae65f7e8af0af4954b7254383e37aaecd0e725"
 dependencies = [
  "anyhow",
  "dirs",
@@ -906,7 +908,7 @@ dependencies = [
 [[package]]
 name = "cmrt-timeline"
 version = "0.1.0"
-source = "git+https://github.com/cat2151/clap-mml-play-server#0a938db9bce30dfbc959ba9f9dd8638d9db4669a"
+source = "git+https://github.com/cat2151/clap-mml-play-server#31ae65f7e8af0af4954b7254383e37aaecd0e725"
 
 [[package]]
 name = "cmrt-tui-core"
@@ -2605,7 +2607,7 @@ checksum = "19f132c84eca552bf34cab8ec81f1c1dcc229b811638f9d283dceabe58c5569e"
 [[package]]
 name = "plugin-presets"
 version = "0.1.0"
-source = "git+https://github.com/cat2151/clap-mml-play-server#0a938db9bce30dfbc959ba9f9dd8638d9db4669a"
+source = "git+https://github.com/cat2151/clap-mml-play-server#31ae65f7e8af0af4954b7254383e37aaecd0e725"
 dependencies = [
  "anyhow",
  "dunce",

@@ -4,12 +4,15 @@ use crossterm::event::KeyModifiers;
 
 mod auto_reverb;
 mod auto_reverb_effect_list;
+mod drum_categories;
 mod drum_kits;
 mod favorites;
 mod filter_edit;
 mod metadata;
 mod navigation;
+mod pitched_percussion;
 mod plugin_menu;
+mod row_overlap;
 mod start_cursor;
 
 fn press(code: KeyCode) -> KeyEvent {
@@ -174,7 +177,7 @@ fn bass_word_boundary_rejects_sbs_but_accepts_super_bs() {
 }
 
 #[test]
-fn hat_is_the_only_builtin_hi_hat_spelling() {
+fn hat_hyphenated_and_joined_hi_hat_spellings_share_one_preset() {
     let catalog = pairs(&[
         "Drums/Closed Hat.fxp",
         "Drums/Hi-Hat.fxp",
@@ -190,11 +193,15 @@ fn hat_is_the_only_builtin_hi_hat_spelling() {
     for _ in 0..5 {
         select.handle_key(press(KeyCode::Down));
     }
-    assert_eq!(select.presets()[select.preset_cursor()].label, "hat");
+    assert_eq!(select.presets()[select.preset_cursor()].label, "hi-hat");
 
     assert_eq!(
         filtered(&select),
-        ["Drums/Closed Hat.fxp", "Drums/Hi-Hat.fxp"]
+        [
+            "Drums/Closed Hat.fxp",
+            "Drums/Hi-Hat.fxp",
+            "Drums/Hihat.fxp"
+        ]
     );
 }
 
@@ -224,7 +231,7 @@ fn a_preset_and_the_typed_regex_are_combined_with_and() {
     );
     select_group(&mut select, 2);
     select.handle_key(press(KeyCode::Right));
-    for _ in 0..4 {
+    for _ in 0..3 {
         select.handle_key(press(KeyCode::Down));
     }
     assert_eq!(select.presets()[select.preset_cursor()].label, "pad");

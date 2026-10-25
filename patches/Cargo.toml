@@ -5,4 +5,7 @@ edition = "2021"
 
 [dependencies]
 clap-mml-play-server-core = { git = "https://github.com/cat2151/clap-mml-play-server", package = "cmrt-core" }
+# 共有の音高追従表（`patch-pitch-tracking.json`）を読む。
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 regex = "1"

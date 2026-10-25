@@ -9,6 +9,8 @@ use classify::{
     builtin_label_within_role, classify_role, levels, without_ignored_levels, CompiledRole,
 };
 use condition::{is_valid_condition, Condition};
+
+use crate::pitch_tracking::PITCHED_PERCUSSION;
 pub use condition::{plugin_slug, PluginTerm};
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
@@ -62,12 +64,7 @@ impl PatchRole {
     }
 }
 
-/// GridのDrum各行が要求する、明示的な語。互いの残り集合ではない。
-///
-/// Percussionは今も`\bperc`を明示的に要求する（残り物ではない）が、判定は排他的な
-/// cascadeで、より具体的な部位が先に取る。表示パスにはフォルダ名も含まれるので、
-/// `Percussion/Kick Clean.fxp`のように**部位語と`perc`が同時に当たる音色が実在する**。
-/// 多重所属を許すと、そのkick・snare・hatがまとめてPERC行の候補にも化ける。
+/// DrumはKick、Snare、HiHatの順に判定し、残りをPercussionへ分類する。
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum DrumPatchRole {
     Kick,
@@ -124,13 +121,13 @@ pub struct PatchRolePreset {
 /// するので、リテラルの空白を混ぜるとgroupが割れて正規表現として壊れる。
 const KICK_PATTERN: &str = r"\b(?:kick|bass\s?dr(?:um|\b))";
 const SNARE_PATTERN: &str = r"\bsnare";
-const HIHAT_PATTERN: &str = r"\bhat";
+const HIHAT_PATTERN: &str = r"\b(?:hi[\s-]?)?hat";
 /// 部位語の無い打楽器もPERC行の候補にする。`tom`と`ride`は語末に限り、作者名`Tomlyn`や`Rider`を外す。
 /// `clap`は連結語の後半（`HandClap1`・`SPACECLAP`）に来るので、語中のどこでも当てる。
 const PERCUSSION_PATTERN: &str =
-    r"\b(?:perc|toms?\b|cymbal|crash|ride\b|\w*clap|conga|bongo|tabla|timbale)";
+    r"\b(?:perc|toms?\b|cymbal|crash|ride\b|\w*clap|conga|bongo|tabla|timbale|drums?)";
 
-/// Bassの楽器語。Dexedの音色だけ`FM Bass`へ分けるので、plugin条件を変えて2つのpresetで使う。
+/// Bassの楽器語。全pluginで共通に使う。
 macro_rules! bass_words {
     () => {
         // `synbass`の後ろの`o`は`SYNBASSOON`（木管）を外すため。
@@ -138,21 +135,21 @@ macro_rules! bass_words {
     };
 }
 
-/// pianoの楽器語。Dexedの音色だけ`FM Piano`へ分けるので、plugin条件を変えて2つのpresetで使う。
+/// pianoの楽器語。全pluginで共通に使う。
 macro_rules! piano_words {
     () => {
         r"\b(?:keyboard|keys?|piano|rhodes|wurli|e?pno|elepiano|acpiano|grandpiano|harpsi|steinway|clavinet)"
     };
 }
 
-/// stringsの楽器語。Dexedの音色だけ`FM Strings`へ分けるので、plugin条件を変えて2つのpresetで使う。
+/// stringsの楽器語。全pluginで共通に使う。
 macro_rules! strings_words {
     () => {
         r"\b(?:strings?|str(?:g|ng)|cello|violin|viola)"
     };
 }
 
-/// brassの楽器語。Dexedの音色だけ`FM Brass`へ分けるので、plugin条件を変えて2つのpresetで使う。
+/// brassの楽器語。全pluginで共通に使う。
 macro_rules! brass_words {
     () => {
         r"\b(?:trumpet|brass|trombone|horn|tuba|flugelhorn|euphonium|cornet|brs|synbrass|synbrs|tpt)"
@@ -163,38 +160,14 @@ macro_rules! brass_words {
 ///
 /// Dexedの音色名は10文字に詰めた略記（`E.PNO`・`STRGS`・`SYN BRS`）や連結語（`SynBass`）が多いので、
 /// その綴りも並べる。`regex`は先読みを持たないので、除外は直後の1文字の文字クラスで書く。
+///
+/// 並び順はselectorの欄の順で、同じRoleの中のlabelの優先順も兼ねる。1音色は先に当たった
+/// 1つの欄にだけ入る（[`PatchRoleIndex::preset_label_of`]）。
 const BUILTIN_PRESETS: &[PatchRolePreset] = &[
-    preset(
-        PatchRole::Bass,
-        "bass|bs",
-        concat!(bass_words!(), " -plugin:dexed"),
-    ),
-    preset(
-        PatchRole::Bass,
-        "FM Bass",
-        concat!(bass_words!(), " plugin:dexed"),
-    ),
-    preset(
-        PatchRole::Chord,
-        "strings",
-        concat!(strings_words!(), " -plugin:dexed"),
-    ),
-    preset(
-        PatchRole::Chord,
-        "FM Strings",
-        concat!(strings_words!(), " plugin:dexed"),
-    ),
+    preset(PatchRole::Bass, "bass|bs", bass_words!()),
+    preset(PatchRole::Chord, "strings", strings_words!()),
     preset(PatchRole::Chord, "pad", r"\bpad"),
-    preset(
-        PatchRole::Chord,
-        "keyboard|keys|piano",
-        concat!(piano_words!(), " -plugin:dexed"),
-    ),
-    preset(
-        PatchRole::Chord,
-        "FM Piano",
-        concat!(piano_words!(), " plugin:dexed"),
-    ),
+    preset(PatchRole::Chord, "keyboard|keys|piano", piano_words!()),
     preset(
         PatchRole::Chord,
         "organ",
@@ -208,11 +181,19 @@ const BUILTIN_PRESETS: &[PatchRolePreset] = &[
         r"\b(?:choir|vocal|voice|vox|hmnvoice|human)",
     ),
     preset(PatchRole::Lead, "lead", r"\blead"),
+    // `vibra`の後ろの`t`は`vibrato`を外すため。
+    // bellより前に置き、`Tubular Bell`・`Glock Bell`をmalletにする。
+    // pluckより前に置き、弦を叩く`Hammered Dulcimer`をmalletにする。
+    preset(
+        PatchRole::Lead,
+        "mallet",
+        r"\b(?:mallet|marimba|xylo|vibe|vibra(?:$|[^t])|glock|celest|chime|music\s?box|tubular|dulcimer)",
+    ),
     // `harp`の直後の除外は、harpsichordの略記（`HARPSICH`・`HARPSCD`・`HARPSY`・`HARPIC`・`Harpiano`）。
     preset(
         PatchRole::Lead,
         "pluck",
-        r"\b(?:pluck|koto|harp(?:$|[^si]|s(?:$|[^ichy])|i(?:$|[^ca]))|sitar|shamisen|zither|dulcimer|kalimba|banjo|mandolin|lute)",
+        r"\b(?:pluck|koto|harp(?:$|[^si]|s(?:$|[^ichy])|i(?:$|[^ca]))|sitar|shamisen|zither|kalimba|banjo|mandolin|lute)",
     ),
     preset(
         PatchRole::Lead,
@@ -221,29 +202,18 @@ const BUILTIN_PRESETS: &[PatchRolePreset] = &[
     ),
     // saxはフルオーケストラの木管に入らないので、woodwindと別のlabelにしてreverbを分ける。
     preset(PatchRole::Lead, "sax", r"\bsax(?:ophone)?"),
-    preset(
-        PatchRole::Chord,
-        "brass",
-        concat!(brass_words!(), " -plugin:dexed"),
-    ),
-    preset(
-        PatchRole::Chord,
-        "FM Brass",
-        concat!(brass_words!(), " plugin:dexed"),
-    ),
+    preset(PatchRole::Chord, "brass", brass_words!()),
     preset(PatchRole::Lead, "pizzicato", r"\bpizzicato"),
-    preset(PatchRole::Lead, "bell", r"\bbell"),
-    // `vibra`の後ろの`t`は`vibrato`を外すため。
     preset(
         PatchRole::Lead,
-        "mallet",
-        r"\b(?:mallet|marimba|xylo|vibe|vibra(?:$|[^t])|glock|celest|chime|music\s?box|tubular)",
+        "pitched percussion",
+        r"\bpitched\s?percussion\b",
     ),
-    preset(PatchRole::Drum, "kick|bass drum", KICK_PATTERN),
+    preset(PatchRole::Lead, "bell", r"\bbell"),
+    preset(PatchRole::Drum, "kick", KICK_PATTERN),
     preset(PatchRole::Drum, "snare", SNARE_PATTERN),
-    preset(PatchRole::Drum, "hat", HIHAT_PATTERN),
-    preset(PatchRole::Drum, "perc", PERCUSSION_PATTERN),
-    preset(PatchRole::Drum, "drum", r"\bdrums?"),
+    preset(PatchRole::Drum, "hi-hat", HIHAT_PATTERN),
+    preset(PatchRole::Drum, "percussion", PERCUSSION_PATTERN),
     preset(PatchRole::Triggered, "chord", r"\bchord"),
     preset(
         PatchRole::Triggered,
@@ -322,24 +292,40 @@ impl PatchRoleIndex {
                 normalized_display: &normalized_display,
                 ..entry
             };
-            let (role, decided_by) = classify_role(&levels, fallback, &cascade);
+            let (mut role, decided_by) = classify_role(&levels, fallback, &cascade);
+            // Explicit host-provided category: measured melodic percussion must
+            // not lose to the general percussion word. Triggered stays first.
+            let measured = role != PatchRole::Triggered
+                && entry
+                    .selector_category
+                    .is_some_and(|category| category.eq_ignore_ascii_case(PITCHED_PERCUSSION));
+            if measured {
+                role = PatchRole::Lead;
+            }
             index.by_display.insert(entry.display.to_string(), role);
-            if let Some(label) =
+            let label = if role == PatchRole::Drum {
+                let drum_role = classify_drum_role(fallback, &drum_patterns);
+                index
+                    .drum_role_by_display
+                    .insert(entry.display.to_string(), drum_role);
+                index.by_drum_role[drum_role.index()].push(entry.display.to_string());
+                Some(match drum_role {
+                    DrumPatchRole::Kick => "kick",
+                    DrumPatchRole::Snare => "snare",
+                    DrumPatchRole::HiHat => "hi-hat",
+                    DrumPatchRole::Percussion => "percussion",
+                })
+            } else if measured {
+                Some(measured_label(fallback, &builtin_conditions))
+            } else {
                 builtin_label_within_role(decided_by, fallback, role, &builtin_conditions)
-            {
+            };
+            if let Some(label) = label {
                 index
                     .preset_label_by_display
                     .insert(entry.display.to_string(), label);
             }
             index.by_role[role.index()].push(entry.display.to_string());
-            if role == PatchRole::Drum {
-                if let Some(drum_role) = classify_drum_role(fallback, &drum_patterns) {
-                    index
-                        .drum_role_by_display
-                        .insert(entry.display.to_string(), drum_role);
-                    index.by_drum_role[drum_role.index()].push(entry.display.to_string());
-                }
-            }
         }
         index
     }
@@ -348,18 +334,15 @@ impl PatchRoleIndex {
         self.by_display.get(display).copied()
     }
 
-    /// Drumの中の部位。Drum以外の音色と、部位語が当たらないDrumでは`None`。
-    ///
-    /// [`Self::role_of`]が`Drum`でも`None`になりうる（どの部位語にも当たらない
-    /// `drums`だけの音色）ので、`Some(PatchRole::Drum)`から部位の存在を推測しないこと。
+    /// Drumの中の部位。部位語のないDrumはPercussion、Drum以外は`None`。
     pub fn drum_role_of(&self, display: &str) -> Option<DrumPatchRole> {
         self.drum_role_by_display.get(display).copied()
     }
 
-    /// 決まったRoleのbuiltin presetのうち、[`builtin_role_presets`]の並び順で最初に当たったものの`label`。
+    /// 決まったRole内のbuiltin presetのlabel。Drumは排他的な部位分類を使う。
     ///
     /// Roleはcascadeで先に決まり、labelはそのRoleの中だけで探す。Roleがユーザー定義presetだけで
-    /// 決まった音色と、Etcのうちどのpresetにも当たらない音色では`None`。
+    /// 決まったDrum以外の音色と、Etcのうちどのpresetにも当たらない音色では`None`。
     pub fn preset_label_of(&self, display: &str) -> Option<&'static str> {
         self.preset_label_by_display.get(display).copied()
     }
@@ -377,20 +360,32 @@ impl PatchRoleIndex {
     }
 }
 
-/// Drum内の部位を1つだけ決める。[`DrumPatchRole::ALL`]の順で先勝ち。
-///
-/// Roleと違って階層を遡らない。`Percussion`はSurgeのcategoryでもあり、階層順にすると
-/// `Percussion/Kick Clean.fxp`がcategoryでPERCに決まってしまう。どれにも当たらなければ
-/// `None`（＝どの行の候補にもしない）。Percussionを残り物にしない。
+/// 実測で移した音色の欄。名前で楽器が分かるmallet・bellは、その欄を優先する。
+fn measured_label(
+    fallback: PatchRoleInput<'_>,
+    builtin_conditions: &[(&PatchRolePreset, Condition)],
+) -> &'static str {
+    let by_name = PatchRoleInput {
+        selector_category: None,
+        ..fallback
+    };
+    builtin_label_within_role(None, by_name, PatchRole::Lead, builtin_conditions)
+        .filter(|label| matches!(*label, "mallet" | "bell"))
+        .unwrap_or(PITCHED_PERCUSSION)
+}
+
+/// Drum内の部位を1つだけ決める。具体的な部位語を全体から探し、残りはPercussion。
+/// categoryがPercussionでも、音色名のKick・Snare・Hatを優先する。
 fn classify_drum_role(
     entry: PatchRoleInput<'_>,
     drum_patterns: &[Condition; DrumPatchRole::ALL.len()],
-) -> Option<DrumPatchRole> {
+) -> DrumPatchRole {
     DrumPatchRole::ALL
         .into_iter()
         .zip(drum_patterns)
+        .take(3)
         .find(|(_, condition)| condition.matches(entry))
-        .map(|(drum_role, _)| drum_role)
+        .map_or(DrumPatchRole::Percussion, |(drum_role, _)| drum_role)
 }
 
 fn compile_role(role: PatchRole, user_presets: &[(String, String)]) -> CompiledRole {

@@ -42,9 +42,12 @@ fn spawn_patch_loader(
     let state_bg = Arc::clone(&patch_load_state);
     std::thread::spawn(move || {
         let loading_started = std::time::Instant::now();
+        // 表の取得（ネットワーク）を catalog の読込と並べて、一覧が出るまでの待ちを増やさない。
+        let pitch_tracking = std::thread::spawn(crate::pitch_tracking_table::load);
         match crate::patch_catalog_cache::load() {
             Ok(cache) => {
                 let (mut snapshot, cached_voicings) = cache.into_parts();
+                apply_pitch_tracking(&mut snapshot, pitch_tracking.join());
                 snapshot.rebuild_patch_roles(&crate::history::load_mml_patch_filter_presets());
                 let restored_voicing_count = catalog_voicings.load_persisted(cached_voicings);
                 crate::logging::global_log_sink(&format!(
@@ -68,6 +71,23 @@ fn spawn_patch_loader(
         }
     });
     patch_load_state
+}
+
+/// 実測で音高がついてくる drum percussion 行の音色を、lead へ移す。
+/// 表が無ければ移さずに続ける（一覧は出す）。
+fn apply_pitch_tracking(
+    snapshot: &mut cmrt_tui_core::patch_load::PatchCatalogSnapshot,
+    table: std::thread::Result<anyhow::Result<cmrt_patches::pitch_tracking::PitchTrackingTable>>,
+) {
+    let line = match table {
+        Ok(Ok(table)) => {
+            let moved = cmrt_patch_select::pitch_tracking::apply_to_snapshot(snapshot, &table);
+            format!("event=applied moved={moved}")
+        }
+        Ok(Err(error)) => format!("event=unavailable error=\"{error:#}\""),
+        Err(_) => "event=unavailable error=\"panicked\"".to_string(),
+    };
+    crate::logging::global_log_sink(&format!("pitch-tracking: {line}"));
 }
 
 /// effect の catalog を先に走査しておき、件数を log.txt へ残す。

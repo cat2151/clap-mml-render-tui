@@ -7,9 +7,9 @@ fn dexed(display: &str) -> PatchRoleInput<'_> {
     }
 }
 
-/// Dexedのpiano・bass・strings・brassは数が多いので、同じRoleの中で`FM`付きのlabelへ分ける。
+/// Dexedも他pluginと同じ楽器分類へまとめる。
 #[test]
-fn dexed_piano_bass_strings_and_brass_get_their_own_fm_labels() {
+fn dexed_uses_the_same_instrument_labels_as_other_plugins() {
     let surge_piano = "Keys/Grand Piano.fxp";
     let surge_bass = "Basses/Sub Bass.fxp";
     let surge_strings = "Strings/Warm Strings.fxp";
@@ -38,21 +38,24 @@ fn dexed_piano_bass_strings_and_brass_get_their_own_fm_labels() {
     );
 
     assert_eq!(index.role_of(dexed_piano), Some(PatchRole::Chord));
-    assert_eq!(index.preset_label_of(dexed_piano), Some("FM Piano"));
+    assert_eq!(
+        index.preset_label_of(dexed_piano),
+        Some("keyboard|keys|piano")
+    );
     assert_eq!(index.role_of(dexed_bass), Some(PatchRole::Bass));
-    assert_eq!(index.preset_label_of(dexed_bass), Some("FM Bass"));
+    assert_eq!(index.preset_label_of(dexed_bass), Some("bass|bs"));
     assert_eq!(
         index.preset_label_of(surge_piano),
         Some("keyboard|keys|piano")
     );
     assert_eq!(index.preset_label_of(surge_bass), Some("bass|bs"));
     assert_eq!(index.role_of(dexed_strings), Some(PatchRole::Chord));
-    assert_eq!(index.preset_label_of(dexed_strings), Some("FM Strings"));
+    assert_eq!(index.preset_label_of(dexed_strings), Some("strings"));
     assert_eq!(index.role_of(dexed_brass), Some(PatchRole::Chord));
-    assert_eq!(index.preset_label_of(dexed_brass), Some("FM Brass"));
+    assert_eq!(index.preset_label_of(dexed_brass), Some("brass"));
     assert_eq!(index.preset_label_of(surge_strings), Some("strings"));
     assert_eq!(index.preset_label_of(surge_brass), Some("brass"));
-    // FM付きのlabelを持たない楽器は、Dexedでも共通のlabelのまま。
+    // organも全pluginで共通。
     assert_eq!(index.preset_label_of(dexed_organ), Some("organ"));
 }
 

@@ -12,6 +12,7 @@ use clap_mml_render_tui::{
     inspect_daw_cache::InspectDawCacheRequest,
     live_chord_check::LiveChordCheckRequest,
     live_line_check::{LiveLineCheckRequest, ResidualRequest},
+    pitch_tracking_builder::BuildPitchTrackingRequest,
     render_mml::RenderMmlRequest,
     server,
 };
@@ -39,6 +40,7 @@ pub(crate) enum CliAction {
         force: bool,
     },
     BuildPatchCatalogCache,
+    BuildPitchTracking(BuildPitchTrackingRequest),
     PatchRoles {
         config: Option<PathBuf>,
     },
@@ -306,6 +308,12 @@ where
 
     if let Some(Commands::BuildVoicingCache { force }) = cli.command {
         return wrap(CliAction::BuildVoicingCache { force });
+    }
+
+    if let Some(Commands::BuildPitchTracking { output }) = cli.command {
+        return wrap(CliAction::BuildPitchTracking(BuildPitchTrackingRequest {
+            output,
+        }));
     }
 
     if matches!(cli.command, Some(Commands::BuildPatchCatalogCache)) {

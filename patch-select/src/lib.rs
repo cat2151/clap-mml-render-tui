@@ -12,6 +12,7 @@ pub mod notes;
 mod patch_audition;
 mod patch_catalog;
 mod patch_select;
+pub mod pitch_tracking;
 pub mod play_settings;
 pub mod plugin_menu;
 pub mod ui;

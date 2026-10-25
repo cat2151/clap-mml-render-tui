@@ -37,10 +37,7 @@ const CATALOG: [&str; 6] = [
 fn a_kick_opens_on_the_kick_preset() {
     let select = open_on(&CATALOG, Some("Drums/Kick 1.fxp"), None, &[]);
 
-    assert_eq!(
-        start(&select),
-        ("Drum tracks", "kick|bass drum".to_string())
-    );
+    assert_eq!(start(&select), ("Drum tracks", "kick".to_string()));
     assert_eq!(select.selected(), Some("Drums/Kick 1.fxp"));
 }
 
@@ -53,7 +50,7 @@ fn a_pad_opens_on_the_first_chord_preset_that_contains_it() {
 }
 
 #[test]
-fn a_dexed_piano_opens_on_fm_piano_and_leaves_the_piano_preset() {
+fn a_dexed_piano_opens_on_the_shared_piano_preset() {
     let dexed_piano = "rom1a.syx/10 E.PIANO 1";
     let select = PatchSelect::open(PatchSelectRequest {
         patches: vec![
@@ -65,13 +62,16 @@ fn a_dexed_piano_opens_on_fm_piano_and_leaves_the_piano_preset() {
     })
     .expect("patch list is not empty");
 
-    assert_eq!(start(&select), ("Chord track", "FM Piano".to_string()));
+    assert_eq!(
+        start(&select),
+        ("Chord track", "keyboard|keys|piano".to_string())
+    );
     let piano = select
         .presets()
         .iter()
         .find(|preset| preset.label == "keyboard|keys|piano")
         .expect("piano preset");
-    assert_eq!(piano.matches.len(), 1, "Surge XTのpianoだけ");
+    assert_eq!(piano.matches.len(), 2, "DexedとSurge XTのpiano");
 }
 
 #[test]
@@ -114,7 +114,7 @@ fn a_favorite_patch_does_not_open_on_the_favorite_preset() {
     let favorites = ["Drums/Kick 1.fxp", "Pads/Warm Pad.fxp", "Leads/Lead 1.fxp"];
 
     let kick = open_on(&CATALOG, Some("Drums/Kick 1.fxp"), None, &favorites);
-    assert_eq!(start(&kick), ("Drum tracks", "kick|bass drum".to_string()));
+    assert_eq!(start(&kick), ("Drum tracks", "kick".to_string()));
 
     let pad = open_on(&CATALOG, Some("Pads/Warm Pad.fxp"), None, &favorites);
     assert_eq!(start(&pad), ("Chord track", "pad".to_string()));

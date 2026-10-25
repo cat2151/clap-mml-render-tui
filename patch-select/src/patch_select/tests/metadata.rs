@@ -98,7 +98,7 @@ fn all_role_lists_every_preset_in_visible_role_order() {
         .unwrap();
     let drum = labels
         .iter()
-        .position(|label| *label == "Drum › kick|bass drum")
+        .position(|label| *label == "Drum › kick")
         .unwrap();
     let trigger = labels
         .iter()

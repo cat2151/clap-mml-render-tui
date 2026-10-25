@@ -53,6 +53,19 @@ fn build_voicing_cache_subcommand_is_recognized() {
 }
 
 #[test]
+fn build_pitch_tracking_subcommand_takes_the_output_path() {
+    assert_eq!(
+        parse_cli_from(["cmrt", "build-pitch-tracking", "--output", "out.json"]).unwrap(),
+        CliAction::BuildPitchTracking(
+            clap_mml_render_tui::pitch_tracking_builder::BuildPitchTrackingRequest {
+                output: PathBuf::from("out.json"),
+            }
+        )
+    );
+    assert!(parse_cli_from(["cmrt", "build-pitch-tracking"]).is_err());
+}
+
+#[test]
 fn build_patch_catalog_cache_subcommand_is_recognized() {
     assert_eq!(
         parse_cli_from(["cmrt", "build-patch-catalog-cache"]).unwrap(),

@@ -3,8 +3,8 @@ use clap_mml_render_tui::{
     bass_voicing_inspect, config, config_editor, dexed_duplicates,
     dexed_duplicates::DexedDuplicatesRequest, guitar_articulation_events, live_chord_check,
     live_chord_check::LiveChordCheckRequest, live_line_check,
-    live_line_check::LiveLineCheckRequest, render_mml, render_mml::RenderMmlRequest, server, tui,
-    updater, voicing_cache_builder,
+    live_line_check::LiveLineCheckRequest, pitch_tracking_builder, render_mml,
+    render_mml::RenderMmlRequest, server, tui, updater, voicing_cache_builder,
 };
 use cmrt_core::play_samples;
 
@@ -227,6 +227,9 @@ fn run() -> Result<()> {
             return voicing_cache_builder::run_build_voicing_cache(&cfg, force);
         }
         CliAction::BuildPatchCatalogCache => unreachable!(),
+        CliAction::BuildPitchTracking(request) => {
+            return pitch_tracking_builder::run(&cfg, &request);
+        }
         CliAction::RenderMml(request) => {
             return render_mml::run(&cfg, &request);
         }

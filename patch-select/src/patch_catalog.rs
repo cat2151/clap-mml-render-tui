@@ -69,6 +69,13 @@ impl PatchCatalogEntry {
         self.has_builtin_effects
     }
 
+    /// Apply host-verified category metadata without losing aliases/effect flags.
+    pub fn with_selector_category(mut self, category: String) -> Self {
+        self.normalized_selector_category = Some(category.to_lowercase());
+        self.selector_category = Some(category);
+        self
+    }
+
     /// 同じ音の patch をこの行へまとめた件数と名前を付ける。
     pub fn with_merged(mut self, count: usize, names: Vec<String>) -> Self {
         self.merged_count = count;

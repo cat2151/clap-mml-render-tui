@@ -1,5 +1,6 @@
 use super::*;
 
+mod pitched_percussion;
 mod plugin_terms;
 
 fn input<'a>(display: &'a str, category: Option<&'a str>) -> PatchRoleInput<'a> {
@@ -85,7 +86,7 @@ fn bass_word_boundary_rejects_sbs_but_accepts_super_bs() {
 }
 
 #[test]
-fn drum_parts_are_explicit_and_percussion_is_not_the_remainder() {
+fn drum_parts_cover_every_drum_and_percussion_is_the_remainder() {
     let index = PatchRoleIndex::build(
         [
             input("kick", None),
@@ -102,9 +103,9 @@ fn drum_parts_are_explicit_and_percussion_is_not_the_remainder() {
     assert_eq!(index.drum_candidates(DrumPatchRole::HiHat), ["closed hat"]);
     assert_eq!(
         index.drum_candidates(DrumPatchRole::Percussion),
-        ["perc shaker"]
+        ["perc shaker", "drum loop"]
     );
-    // `drum loop` は Drum だが部位語が無いので、どの行の候補にもならない。
+    // 部位語のないDrumもPercussion行で使える。
     assert_eq!(index.role_of("drum loop"), Some(PatchRole::Drum));
 }
 
@@ -152,7 +153,7 @@ fn bass_drum_is_a_kick_in_both_spellings() {
 
 /// 表示名から部位を引き直せること。同じ用途の音色だけを抽選し直す側が使う。
 #[test]
-fn drum_role_of_answers_the_part_only_for_drums_with_a_part_word() {
+fn drum_role_of_answers_a_part_for_every_drum() {
     let index = PatchRoleIndex::build(
         [
             input("Drums/Kick Clean.fxp", None),
@@ -181,13 +182,16 @@ fn drum_role_of_answers_the_part_only_for_drums_with_a_part_word() {
         index.drum_role_of("Drums/Perc Shaker.fxp"),
         Some(DrumPatchRole::Percussion)
     );
-    // Drum だが部位語が無い音色と、Drum 以外は、どちらも部位を持たない。
+    // 部位語がなくてもDrumにはPercussionを割り当てる。
     assert_eq!(
         index.role_of("Drums/Drum Loop.fxp"),
         Some(PatchRole::Drum),
         "部位語が無くても role は Drum のまま"
     );
-    assert_eq!(index.drum_role_of("Drums/Drum Loop.fxp"), None);
+    assert_eq!(
+        index.drum_role_of("Drums/Drum Loop.fxp"),
+        Some(DrumPatchRole::Percussion)
+    );
     assert_eq!(index.drum_role_of("Pads/Warm Pad.fxp"), None);
     assert_eq!(index.drum_role_of("Missing/Not In Catalog.fxp"), None);
 }
@@ -218,7 +222,7 @@ fn preset_label_is_the_first_builtin_preset_within_the_decided_role() {
     assert_eq!(index.preset_label_of("DX Snare 1"), Some("snare"));
     assert_eq!(
         index.preset_label_of("Percussion/Kick Clean.fxp"),
-        Some("kick|bass drum")
+        Some("kick")
     );
     // labelはRoleを決めた階層（ここではcategory）の中で探す。
     assert_eq!(index.preset_label_of("String Pad"), Some("pad"));
@@ -250,7 +254,8 @@ fn a_nearer_level_wins_over_the_folders_above_it() {
     assert_eq!(index.preset_label_of(sax), Some("sax"));
     assert_eq!(index.preset_label_of(bari), Some("sax"));
     assert_eq!(index.role_of(bell), Some(PatchRole::Lead));
-    assert_eq!(index.preset_label_of(bell), Some("bell"));
+    // malletはbellより優先する。
+    assert_eq!(index.preset_label_of(bell), Some("mallet"));
     assert_eq!(index.preset_label_of(horn), Some("brass"));
 }
 
@@ -270,7 +275,7 @@ fn the_jeff_saxe_folder_is_not_evidence_of_a_sax() {
     let index = PatchRoleIndex::build([input(crash, None), input(tom, None)], &[]);
 
     assert_eq!(index.role_of(crash), Some(PatchRole::Drum));
-    assert_eq!(index.preset_label_of(crash), Some("perc"));
+    assert_eq!(index.preset_label_of(crash), Some("percussion"));
     assert_eq!(index.role_of(tom), Some(PatchRole::Drum));
 }
 
@@ -280,7 +285,7 @@ fn joined_handclaps_are_percussion() {
     let spaced = "dexed_cart_1.0/!instruments/misc/dx7_a6.syx/10 hand claps";
     let index = PatchRoleIndex::build([input(joined, None), input(spaced, None)], &[]);
 
-    assert_eq!(index.preset_label_of(joined), Some("perc"));
+    assert_eq!(index.preset_label_of(joined), Some("percussion"));
     assert_eq!(
         index.drum_candidates(DrumPatchRole::Percussion),
         [joined, spaced]
@@ -341,9 +346,10 @@ fn abbreviated_instrument_names_get_their_labels() {
         ("marimba", "mallet"),
         ("vibra x  3", "mallet"),
         ("music box", "mallet"),
-        ("tom toms", "perc"),
-        ("congas", "perc"),
-        ("crash.cymb", "perc"),
+        ("hammered dulcimer", "mallet"),
+        ("tom toms", "percussion"),
+        ("congas", "percussion"),
+        ("crash.cymb", "percussion"),
     ];
     let index = PatchRoleIndex::build(cases.map(|(name, _)| input(name, None)), &[]);
 
@@ -380,4 +386,21 @@ fn toms_and_congas_are_percussion_row_candidates() {
         index.drum_candidates(DrumPatchRole::Percussion),
         ["tom toms", "congas"]
     );
+}
+
+/// categoryが楽器を示さない音色だけが、名前のdulcimerでmalletになる。
+#[test]
+fn surge_hammered_dulcimers_by_category() {
+    let modelled = "patches_3rdparty/jacky ligon/modelled/hammered dulcimer.fxp";
+    let strings = "patches_3rdparty/jacky ligon/strings/hammered dulcimer.fxp";
+    let index = PatchRoleIndex::build(
+        [
+            input(modelled, Some("Modelled")),
+            input(strings, Some("Strings")),
+        ],
+        &[],
+    );
+
+    assert_eq!(index.preset_label_of(modelled), Some("mallet"));
+    assert_eq!(index.preset_label_of(strings), Some("strings"));
 }

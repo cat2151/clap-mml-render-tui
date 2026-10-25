@@ -15,7 +15,7 @@ use super::super::super::{DawApp, DawMode};
 use crate::input::tests::build_test_app;
 
 const PAD_INIT_CELL: &str = r#"{"Surge XT patch": "Pads/Snapshot Pad.fxp"}"#;
-const KEYS_INIT_CELL: &str = r#"{"Surge XT patch": "Pads/Snapshot Keys.fxp"}"#;
+const KEYS_INIT_CELL: &str = r#"{"Surge XT patch": "Pads/Snapshot Keys Pad.fxp"}"#;
 
 pub(in crate::mml_overlay_glue) fn plain(code: char) -> KeyEvent {
     KeyEvent::new(KeyCode::Char(code), KeyModifiers::NONE)
@@ -27,7 +27,7 @@ pub(in crate::mml_overlay_glue) fn key(code: KeyCode) -> KeyEvent {
 
 /// 2 つとも Chord の `pad` Preset に入れて、pad の track で開いた selector（Chord の `pad` で開く）の中で行き来できるようにする。
 fn catalog_pairs() -> Vec<(String, String)> {
-    ["Pads/Snapshot Keys.fxp", "Pads/Snapshot Pad.fxp"]
+    ["Pads/Snapshot Keys Pad.fxp", "Pads/Snapshot Pad.fxp"]
         .into_iter()
         .map(|display| (display.to_string(), display.to_lowercase()))
         .collect()
@@ -117,7 +117,7 @@ fn add_patch_favorite(app: &mut DawApp, patch: &str) {
 fn the_favorite_preset_lists_the_patch_favorites_of_the_store() {
     let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = app_with_pad_track();
-    add_patch_favorite(&mut app, "Pads/Snapshot Keys.fxp");
+    add_patch_favorite(&mut app, "Pads/Snapshot Keys Pad.fxp");
     app.handle_normal_key_event(plain('t'));
 
     // Preset pane の先頭（ALL）の 1 つ下が `★ Favorite`。その一覧の先頭を確定する。
@@ -319,7 +319,7 @@ fn the_preview_goes_through_the_track_effect_chain() {
     wait_until("前の候補の試聴", || {
         sink.prepared()
             .iter()
-            .any(|patch| patch.patch() == Some("Pads/Snapshot Keys.fxp"))
+            .any(|patch| patch.patch() == Some("Pads/Snapshot Keys Pad.fxp"))
     });
     let prepared = sink.prepared();
     assert!(!prepared.is_empty());

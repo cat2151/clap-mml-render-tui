@@ -3,6 +3,26 @@ use super::*;
 use cmrt_core::AudioEffectPluginInfo;
 use cmrt_patches::PatchRoleInput;
 
+#[test]
+#[ignore = "read-only verification; set CMRT_TEST_AUTO_REVERB_FILE to the migrated settings"]
+fn installed_renamed_drum_settings_survive_reload() {
+    let path = std::env::var("CMRT_TEST_AUTO_REVERB_FILE").unwrap();
+    for _ in 0..2 {
+        let value: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        let saved: BTreeMap<String, Value> =
+            serde_json::from_value(value["rules"].clone()).unwrap();
+        let rules = AutoReverbRules::from_saved(value["enabled"].as_bool().unwrap(), &saved, None);
+        assert_eq!(rules.enabled, value["enabled"].as_bool().unwrap());
+        for label in ["kick", "hi-hat", "percussion"] {
+            let row = row_index(&rules, label);
+            assert_eq!(
+                rules.rows()[row].1.as_ref().unwrap_or(&Value::Null),
+                &saved[label]
+            );
+        }
+    }
+}
+
 pub(crate) const DEXED_BASS: &str = "Factory.syx/03 DX Bass 1";
 pub(crate) const DEXED_KICK: &str = "Drums.syx/00 Kick Hard";
 pub(crate) const DEXED_SNARE: &str = "Drums.syx/01 Snare Tight";
@@ -97,7 +117,7 @@ fn default_rules_leave_bass_and_kick_dry() {
     assert_eq!(
         resolve_default(DEXED_KICK, false),
         AutoReverb::Dry {
-            row: "kick|bass drum".to_string()
+            row: "kick".to_string()
         }
     );
 }
@@ -268,7 +288,7 @@ fn default_rules_mix_rooms_halls_and_dry_rows() {
     assert_eq!(saved["sax"], room("Medium Clear Room"));
     assert_eq!(saved["keyboard|keys|piano"], hall("Piano Studio"));
     assert_eq!(saved["etc 未分類"], hall("Large Clear Hall"));
-    for name in ["bass|bs", "bass ユーザー追加", "kick|bass drum"] {
+    for name in ["bass|bs", "bass ユーザー追加", "kick"] {
         assert_eq!(saved[name], Value::Null, "{name}");
     }
     assert!(rules.enabled());

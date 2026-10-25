@@ -245,10 +245,10 @@ fn each_drum_row_opens_in_the_drum_role_at_its_own_builtin_preset() {
     let ctx = context(&patches);
     let mut screen = chord_mode_screen();
     let expectations = [
-        (DrumRole::Kick, "kick|bass drum", "Drums/Kick 01.wav"),
+        (DrumRole::Kick, "kick", "Drums/Kick 01.wav"),
         (DrumRole::Snare, "snare", "Drums/Snare 01.wav"),
-        (DrumRole::HiHat, "hat", "Drums/Hi Hat 01.wav"),
-        (DrumRole::Percussion, "perc", "Drums/Perc Clap 01.wav"),
+        (DrumRole::HiHat, "hi-hat", "Drums/Hi Hat 01.wav"),
+        (DrumRole::Percussion, "percussion", "Drums/Perc Clap 01.wav"),
     ];
 
     for (role, preset, patch) in expectations {
@@ -307,7 +307,7 @@ fn clicking_a_role_or_preset_selects_it_and_moves_the_focus_there() {
     let kick = selector(&screen)
         .presets()
         .iter()
-        .position(|preset| preset.label == "kick|bass drum")
+        .position(|preset| preset.label == "kick")
         .unwrap();
     screen.handle_patch_selector_mouse(
         mouse(
@@ -319,7 +319,7 @@ fn clicking_a_role_or_preset_selects_it_and_moves_the_focus_there() {
         &ctx,
     );
     let selector = selector(&screen);
-    assert_eq!(preset_label(selector), "kick|bass drum");
+    assert_eq!(preset_label(selector), "kick");
     assert_eq!(selector.focus(), PatchPaneFocus::Preset);
     assert_eq!(filtered_patches(selector), ["Drums/Kick 01.wav"]);
     assert_eq!(
@@ -405,7 +405,7 @@ fn a_note_row_opens_in_the_role_and_drum_preset_of_its_current_patch() {
 
     let selector = selector(&screen);
     assert_eq!(role_label(selector), "Drum tracks");
-    assert_eq!(preset_label(selector), "kick|bass drum");
+    assert_eq!(preset_label(selector), "kick");
     assert_eq!(filtered_patches(selector), ["Drums/Kick 01.wav"]);
 }
 

@@ -9,6 +9,7 @@
 mod grouping;
 mod layout;
 mod naming;
+pub mod pitch_tracking;
 mod roles;
 
 pub use clap_mml_play_server_core::patch_state_prepare::{

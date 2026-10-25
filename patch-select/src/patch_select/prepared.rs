@@ -41,6 +41,16 @@ impl PreparedPresets {
             for preset in &mut presets {
                 preset.matches = match preset.pattern.as_deref() {
                     None => Arc::clone(&role_indices),
+                    // 組み込みpresetは共通索引が1音色に1つだけ決めたlabelで並べ、欄を排他にする。
+                    // 正規表現を欄ごとに当てると、`Tubular Bell`がbellとmalletの両方に入る。
+                    Some(_) if !preset.is_user => role_indices
+                        .iter()
+                        .copied()
+                        .filter(|&index| {
+                            role_index.preset_label_of(all[index].display())
+                                == Some(preset.label.as_str())
+                        })
+                        .collect::<Arc<[usize]>>(),
                     Some(pattern) => filter_candidates(all, &role_indices, pattern)?.into(),
                 };
             }
