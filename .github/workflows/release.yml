@@ -1,0 +1,221 @@
+# Builds the Windows x64 release zip (VC++ runtime linked statically): cmrt.exe and the play/render server exes.
+# schedule:          build, check and (re)create the GitHub Release v<app/Cargo.toml version>, replacing an existing one.
+#                    Skips build and publish when the commits equal those of the published release.
+# workflow_dispatch: always builds. publish=false builds and checks only, keeping the zip as a run artifact;
+#                    publish=true also publishes.
+name: Release
+
+on:
+  schedule:
+    # 01:23 JST, after update-cat2151-rust-deps.yml (01:00 JST) has refreshed Cargo.lock.
+    - cron: "23 16 * * *"
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "GitHub Release を公開する（false はビルドと検査だけ）"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  # Fix the commits once, so that the build and the notes use the same sources.
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.refs.outputs.version }}
+      server: ${{ steps.refs.outputs.server }}
+      build: ${{ steps.changed.outputs.build }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            app/Cargo.toml
+            Cargo.lock
+            .github/release-notes.md
+          sparse-checkout-cone-mode: false
+      # The server exes are built from the commit that Cargo.lock pins for cmrt-core,
+      # so cmrt.exe and the bundled servers share one protocol version.
+      - id: refs
+        shell: python
+        run: |
+          import os, re, tomllib
+          version = tomllib.load(open('app/Cargo.toml', 'rb'))['package']['version']
+          lock = tomllib.load(open('Cargo.lock', 'rb'))
+          prefix = 'git+https://github.com/cat2151/clap-mml-play-server#'
+          servers = {p['source'].removeprefix(prefix) for p in lock['package']
+                     if p.get('source', '').startswith(prefix)}
+          if len(servers) != 1 or not re.fullmatch(r'[0-9a-f]{40}', next(iter(servers))):
+              raise SystemExit(f'Cargo.lock must pin exactly one clap-mml-play-server commit: {servers}')
+          server = servers.pop()
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as out:
+              out.write(f'version={version}\n')
+              out.write(f'server={server}\n')
+              out.write(f'inputs=<!-- build-inputs clap-mml-render-tui={os.environ["GITHUB_SHA"]} clap-mml-play-server={server} -->\n')
+      # The notes carry this line, so the next scheduled run can tell whether anything changed.
+      - name: Compare with the published release
+        id: changed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          TAG: v${{ steps.refs.outputs.version }}
+          INPUTS: ${{ steps.refs.outputs.inputs }}
+        run: |
+          set -euo pipefail
+          published=$(gh release view "$TAG" --json body --jq .body 2> /dev/null | tr -d '\r' | grep -F '<!-- build-inputs ' | head -n 1) || published=""
+          if [ "$EVENT" != schedule ]; then
+            build=true; reason="手動起動なので、変更の有無に関係なくビルドする"
+          elif [ -z "$published" ]; then
+            build=true; reason="公開中の $TAG が無いか、build-inputs の行を読めないのでビルドする"
+          elif [ "$published" = "$INPUTS" ]; then
+            build=false; reason="公開中の $TAG と同じ commit なので、build と publish を飛ばす"
+          else
+            build=true; reason="公開中の $TAG と commit が違うのでビルドする"
+          fi
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+          {
+            echo "## 再ビルドの判定"
+            echo "- $reason"
+            echo "- 今回: \`$INPUTS\`"
+            echo "- 公開中: \`${published:-なし}\`"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Write the release notes
+        env:
+          VERSION: ${{ steps.refs.outputs.version }}
+          SERVER: ${{ steps.refs.outputs.server }}
+          INPUTS: ${{ steps.refs.outputs.inputs }}
+        shell: python
+        run: |
+          import os, pathlib, string
+          env = os.environ
+          commits = [f'- clap-mml-render-tui: {env["GITHUB_SHA"]}',
+                     f'- clap-mml-play-server: {env["SERVER"]}']
+          package_files = '、'.join(['clap-mml-realtime-play-server.exe', 'clap-mml-render-server.exe',
+                                     'LICENSE', 'RUBBERBAND_LICENSE.ja.md', 'RUBBERBAND_COPYING'])
+          template = string.Template(pathlib.Path('.github/release-notes.md').read_text(encoding='utf-8'))
+          notes = template.substitute(name='clap-mml-render-tui', version=env['VERSION'],
+              package_files=package_files, commits='\n'.join(commits), build_inputs=env['INPUTS'])
+          pathlib.Path('notes.md').write_text(notes, encoding='utf-8')
+          with open(env['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as summary:
+              summary.write(notes)
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-notes
+          path: notes.md
+          if-no-files-found: error
+
+  build:
+    needs: resolve
+    # A skipped build also skips publish, and the run still ends as a success.
+    if: needs.resolve.outputs.build == 'true'
+    runs-on: windows-latest
+    env:
+      ZIP: clap-mml-render-tui-${{ needs.resolve.outputs.version }}-windows-x64.zip
+      # cc (rubberband-ffi) sees crt-static in CARGO_CFG_TARGET_FEATURE and compiles the C++ side with /MT.
+      CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS: -C target-feature=+crt-static
+    steps:
+      - run: git config --global core.longpaths true
+      - uses: actions/checkout@v7
+        with:
+          path: clap-mml-render-tui
+      - uses: actions/checkout@v7
+        with:
+          repository: cat2151/clap-mml-play-server
+          ref: ${{ needs.resolve.outputs.server }}
+          path: clap-mml-play-server
+      # Only for the CRT linkage checker; it does not go into the binaries.
+      - uses: actions/checkout@v7
+        with:
+          repository: cat2151/cat-plugin-player
+          path: cat-plugin-player
+          sparse-checkout: scripts/crt_linkage.py
+          sparse-checkout-cone-mode: false
+      # The runner image may lag behind the stable Rust that the code is built with locally.
+      - name: Update Rust and show tool versions
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+          rustc -vV
+          cargo -V
+      - name: Build cmrt
+        working-directory: clap-mml-render-tui
+        run: cargo build --release --locked --bin cmrt
+      - name: Build the play and render servers
+        working-directory: clap-mml-play-server
+        run: cargo build --release --locked --bin clap-mml-realtime-play-server --bin clap-mml-render-server
+      - name: Check the CRT linkage
+        run: >-
+          python cat-plugin-player/scripts/crt_linkage.py
+          clap-mml-render-tui/target/release/cmrt.exe
+          clap-mml-play-server/target/release/clap-mml-realtime-play-server.exe
+          clap-mml-play-server/target/release/clap-mml-render-server.exe
+      # RUBBERBAND_COPYING is the GPL text of the exact Rubber Band commit that build.rs fetched.
+      - name: Package
+        shell: python
+        run: |
+          import glob, os, pathlib, zipfile
+          # One build-script output dir per build configuration; all fetch the same pinned commit.
+          copying = glob.glob('clap-mml-render-tui/target/release/build/rubberband-ffi-*/out/rubberband-src/COPYING')
+          if not copying or len({pathlib.Path(p).read_bytes() for p in copying}) != 1:
+              raise SystemExit(f'Expected one Rubber Band COPYING text, found: {copying}')
+          files = {
+              'cmrt.exe': 'clap-mml-render-tui/target/release/cmrt.exe',
+              'clap-mml-realtime-play-server.exe': 'clap-mml-play-server/target/release/clap-mml-realtime-play-server.exe',
+              'clap-mml-render-server.exe': 'clap-mml-play-server/target/release/clap-mml-render-server.exe',
+              'LICENSE': 'clap-mml-render-tui/LICENSE',
+              'RUBBERBAND_LICENSE.ja.md': 'clap-mml-render-tui/RUBBERBAND_LICENSE.ja.md',
+              'RUBBERBAND_COPYING': copying[0],
+          }
+          with zipfile.ZipFile(os.environ['ZIP'], 'w', zipfile.ZIP_DEFLATED) as out:
+              for name, path in files.items():
+                  out.write(path, name)
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows-x64
+          path: ${{ env.ZIP }}
+          if-no-files-found: error
+      # After packaging: cargo test rebuilds the bin with the test-support features of dev-dependencies.
+      - name: Test
+        working-directory: clap-mml-render-tui
+        env:
+          RUST_BACKTRACE: '1'
+        run: cargo test --release --locked
+      - name: Disk usage
+        if: always()
+        run: Get-PSDrive -PSProvider FileSystem | Format-Table Name, Used, Free
+
+  # Runs only after resolve and build (including the CRT check and the tests) succeed,
+  # so a failed day leaves the previous release in place.
+  publish:
+    if: github.event_name == 'schedule' || inputs.publish
+    needs: [resolve, build]
+    runs-on: ubuntu-latest
+    # A scheduled and a manual run must not delete each other's release halfway.
+    concurrency:
+      group: release-publish
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: v${{ needs.resolve.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Remove the existing release and tag
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release delete "$TAG" --cleanup-tag --yes
+          fi
+          if gh api "repos/$GH_REPO/git/ref/tags/$TAG" > /dev/null 2>&1; then
+            gh api -X DELETE "repos/$GH_REPO/git/refs/tags/$TAG"
+          fi
+      - name: Create the release
+        run: gh release create "$TAG" dist/*.zip --target "$GITHUB_SHA" --title "$TAG" --notes-file dist/notes.md
