@@ -156,7 +156,8 @@ pub(super) fn turn_on_repeat(overlay: &mut MmlOverlay<'_>, now: Instant) {
     assert!(overlay.play_settings().repeat);
 }
 
-pub(super) const PAD: &str = "Pads/Pad 1.fxp";
+/// 開いた直後の先頭から↓で移る候補。
+pub(super) const NEXT: &str = "Leads/Lead 1.fxp";
 pub(super) const CDE: [(u8, u64, u64); 3] = [(60, 0, 250), (62, 250, 250), (64, 500, 250)];
 
 pub(super) fn assert_notes(heard: Heard, patch: Option<&str>, pitches: &[u8], gate_ms: u64) {
@@ -182,7 +183,7 @@ fn moving_the_candidate_sounds_the_note_at_the_cursor() {
 
     let action = overlay.handle_key(press(KeyCode::Down), now);
 
-    assert_notes(hear(&overlay, action), Some(PAD), &[64], 250);
+    assert_notes(hear(&overlay, action), Some(NEXT), &[64], 250);
 }
 
 #[test]
@@ -193,7 +194,7 @@ fn moving_the_candidate_on_an_empty_line_sounds_the_fallback_note() {
 
     let action = overlay.handle_key(press(KeyCode::Down), now);
 
-    assert_notes(hear(&overlay, action), Some(PAD), &[60], 250);
+    assert_notes(hear(&overlay, action), Some(NEXT), &[60], 250);
 }
 
 #[test]
@@ -209,7 +210,7 @@ fn moving_the_candidate_with_repeat_on_sounds_the_whole_line() {
     let Heard::Line { patch, notes } = hear(&overlay, action) else {
         panic!("行の試聴のはず");
     };
-    assert_eq!(patch.as_deref(), Some(PAD));
+    assert_eq!(patch.as_deref(), Some(NEXT));
     assert_eq!(notes[..3], CDE);
 }
 
@@ -225,7 +226,7 @@ fn moving_the_candidate_off_every_unit_sounds_the_whole_line() {
     assert_eq!(
         hear(&overlay, action),
         Heard::Line {
-            patch: Some(PAD.to_string()),
+            patch: Some(NEXT.to_string()),
             notes: CDE.to_vec(),
         }
     );

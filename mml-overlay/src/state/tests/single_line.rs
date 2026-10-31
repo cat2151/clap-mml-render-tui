@@ -200,7 +200,7 @@ fn enter_inside_the_patch_select_confirms_the_patch_and_does_not_commit() {
         overlay.handle_key(press(KeyCode::Enter), now),
         MmlOverlayAction::Continue
     );
-    assert_eq!(overlay.patch(), Some("Leads/Lead 1.fxp"));
+    assert_eq!(overlay.patch(), Some("Pads/Pad 1.fxp"));
     assert_eq!(overlay.value(), "cde");
     assert!(overlay.is_open());
 }

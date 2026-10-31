@@ -2,7 +2,9 @@
 
 use std::sync::Arc;
 
-use cmrt_patches::{builtin_role_presets, normalize_user_role_presets, PatchRole, PatchRolePreset};
+use cmrt_patches::{
+    builtin_role_presets, normalize_user_role_presets, PatchRole, PatchRoleIndex, PatchRolePreset,
+};
 
 use super::filter::is_valid_condition;
 
@@ -102,6 +104,32 @@ impl FilterPreset {
         self.label = format!("{} › {}", self.group.preset_prefix(), self.label);
         self
     }
+}
+
+/// Role=ALL の Preset 欄に並ぶ組み込み preset の順（Role 順、Role の中は組み込み順）での位置。
+/// 組み込み preset に入らない音色はその Role の preset の後ろ、Role の無い音色は最後に置く。
+pub fn preset_rank(role_index: &PatchRoleIndex, display: &str) -> usize {
+    let Some(role) = role_index.role_of(display) else {
+        return usize::MAX;
+    };
+    let label = role_index.preset_label_of(display);
+    let mut rank = 0;
+    for group in FilterGroup::ALL.into_iter().skip(1) {
+        let labels: Vec<_> = builtin_role_presets()
+            .iter()
+            .filter(|preset| group.role() == Some(preset.role))
+            .map(|preset| preset.label)
+            .collect();
+        if group.role() == Some(role) {
+            return rank
+                + labels
+                    .iter()
+                    .position(|&builtin| Some(builtin) == label)
+                    .unwrap_or(labels.len());
+        }
+        rank += labels.len() + 1;
+    }
+    usize::MAX
 }
 
 pub(super) fn presets_for(

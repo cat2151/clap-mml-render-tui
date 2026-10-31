@@ -8,6 +8,7 @@
 0022 は DAW の effect chain、0023〜0024 は offline render の経路（render-server の実体と 1 経路化）、
 0025 は Guitar Articulation 画面で METAL-GTX の効かない操作を出さないこと、0026 はそのアルペジエーター overlay とメイン画面の線引き。
 0027 は先頭 JSON 付き MML を「;」でトラックに分けた形を扱わないこと。
+0028 は patch selector の一覧をどの Role でも Preset 欄の順に並べること。
 利用者向けの現行仕様は `README.ja.md` にある。
 
 ここに載っている実装はすべて完了済み。
@@ -45,3 +46,4 @@ play-server 側（プラグインの実測仕様・実行時の設計）は
 | [0025](0025-metal-gtx-unused-controls.md) | METAL-GTX の Stop_Key・「C0 を短く」・CC31・トリルへの CC28 は効かないので画面に出さない |
 | [0026](0026-arp-overlay-owns-what-to-play.md) | アルペジエーター overlay は素材とアルペジエーターの設定を自分で持ち、行全体のルール・アクセントはメイン画面と共有する |
 | [0027](0027-leading-json-with-semicolon-tracks-is-out-of-scope.md) | 先頭 JSON 付き MML を「;」でトラックに分けた形は扱わない（運用データに無いので、対応も報告もしない） |
+| [0028](0028-selector-list-follows-preset-order.md) | patch selector の一覧は、どの Role でも Preset 欄の順に並べる |

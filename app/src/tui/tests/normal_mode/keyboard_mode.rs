@@ -81,7 +81,7 @@ fn keyboard_patch_keys_navigate_the_list_and_apply_the_selected_patch() {
         "patches_factory/Pad/Pad 10.fxp",
         "patches_factory/Pad/Pad 11.fxp",
     ]))));
-    app.start_keyboard(Some("patches_factory/Lead/Lead 1.fxp".to_string()));
+    app.start_keyboard(Some("patches_factory/Pad/Pad 00.fxp".to_string()));
     assert!(app
         .keyboard
         .state
@@ -91,26 +91,26 @@ fn keyboard_patch_keys_navigate_the_list_and_apply_the_selected_patch() {
     app.handle_keyboard_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
     assert_eq!(
         app.keyboard.state.patch(),
-        Some("patches_factory/Lead/Lead 2.fxp")
+        Some("patches_factory/Pad/Pad 01.fxp")
     );
     assert!(app.keyboard.state.held().is_empty());
 
     app.handle_keyboard_key_event(KeyEvent::new(KeyCode::End, KeyModifiers::NONE));
     assert_eq!(
         app.keyboard.state.patch(),
-        Some("patches_factory/Pad/Pad 11.fxp")
+        Some("patches_factory/Lead/Lead 2.fxp")
     );
 
     app.handle_keyboard_key_event(KeyEvent::new(KeyCode::Home, KeyModifiers::NONE));
     assert_eq!(
         app.keyboard.state.patch(),
-        Some("patches_factory/Lead/Lead 1.fxp")
+        Some("patches_factory/Pad/Pad 00.fxp")
     );
 
     app.handle_keyboard_key_event(KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE));
     assert_eq!(
         app.keyboard.state.patch(),
-        Some("patches_factory/Pad/Pad 08.fxp")
+        Some("patches_factory/Pad/Pad 10.fxp")
     );
 }
 
@@ -132,30 +132,30 @@ fn keyboard_vim_keys_and_ctrl_page_keys_navigate_patches() {
         "patches_factory/Pad/Pad 09.fxp",
         "patches_factory/Pad/Pad 10.fxp",
     ]))));
-    app.start_keyboard(Some("patches_factory/Lead/Lead 1.fxp".to_string()));
+    app.start_keyboard(Some("patches_factory/Pad/Pad 00.fxp".to_string()));
 
     app.handle_keyboard_key_event(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE));
     assert_eq!(
         app.keyboard.state.patch(),
-        Some("patches_factory/Lead/Lead 2.fxp")
+        Some("patches_factory/Pad/Pad 01.fxp")
     );
 
     app.handle_keyboard_key_event(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE));
     assert_eq!(
         app.keyboard.state.patch(),
-        Some("patches_factory/Lead/Lead 1.fxp")
+        Some("patches_factory/Pad/Pad 00.fxp")
     );
 
     app.handle_keyboard_key_event(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL));
     assert_eq!(
         app.keyboard.state.patch(),
-        Some("patches_factory/Pad/Pad 08.fxp")
+        Some("patches_factory/Pad/Pad 10.fxp")
     );
 
     app.handle_keyboard_key_event(KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL));
     assert_eq!(
         app.keyboard.state.patch(),
-        Some("patches_factory/Lead/Lead 1.fxp")
+        Some("patches_factory/Pad/Pad 00.fxp")
     );
 }
 
@@ -207,6 +207,6 @@ fn keyboard_keeps_an_unknown_patch_until_the_first_navigation_key() {
     app.handle_keyboard_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE));
     assert_eq!(
         app.keyboard.state.patch(),
-        Some("patches_factory/Lead/Lead 1.fxp")
+        Some("patches_factory/Pad/Pad 01.fxp")
     );
 }

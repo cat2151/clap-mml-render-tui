@@ -139,7 +139,7 @@ fn an_initial_query_opens_filtered_by_that_regex() {
 
     assert_eq!(
         filtered(&select),
-        ["Pads/Warm Pad.fxp", "Strings/Warm Strings.fxp"]
+        ["Strings/Warm Strings.fxp", "Pads/Warm Pad.fxp"]
     );
     assert_eq!(text_input::textarea_value(select.query_textarea()), "warm");
 }

@@ -352,8 +352,12 @@ fn app_with_drum_catalog(init_cell: &str) -> (DawApp, std::sync::mpsc::Receiver<
 
 /// `End` で一覧の末尾を確定し、開いた直後の候補がどこまで絞られていたかを見る。
 fn confirm_last_candidate(app: &mut DawApp) {
+    confirm_edge_candidate(app, KeyCode::End);
+}
+
+fn confirm_edge_candidate(app: &mut DawApp, edge: KeyCode) {
     app.handle_normal_key_event(plain('t'));
-    app.handle_direct_patch_select_key_event(key(KeyCode::End));
+    app.handle_direct_patch_select_key_event(key(edge));
     app.handle_direct_patch_select_key_event(key(KeyCode::Enter));
 }
 
@@ -376,7 +380,8 @@ fn a_track_without_a_patch_opens_the_selector_on_all() {
     let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = app_with_drum_catalog("");
 
-    confirm_last_candidate(&mut app);
+    // Chord の Pad は Drum より前に並ぶので、先頭に Pad があれば Drum へ絞られていない。
+    confirm_edge_candidate(&mut app, KeyCode::Home);
 
     assert!(
         app.editor.data[2][0].contains("Pads/Snapshot Pad.fxp"),

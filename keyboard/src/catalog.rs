@@ -12,8 +12,8 @@ use std::collections::BTreeMap;
 use ratatui::widgets::{ListState, TableState};
 
 use cmrt_patch_select::{
-    host_patch_catalog, prepare_user_presets, sort_for_selector, FilterGroup, FilterPreset,
-    HostPatchCatalog, PatchCatalogEntry, PatchCatalogSnapshot, PreparedPresets,
+    host_patch_catalog, prepare_user_presets, preset_rank, sort_for_selector, FilterGroup,
+    FilterPreset, HostPatchCatalog, PatchCatalogEntry, PatchCatalogSnapshot, PreparedPresets,
 };
 use cmrt_patches::PatchRoleIndex;
 use cmrt_tui_core::patch_load::{PatchLoadMeasurement, PatchLoadState};
@@ -181,7 +181,9 @@ impl KeyboardPatchCatalog {
             }
             PatchCatalogSnapshot::Ready(entries) => entries,
         };
-        sort_for_selector(&mut entries);
+        sort_for_selector(&mut entries, |entry| {
+            preset_rank(&host.patch_role_index, entry.display())
+        });
         let user_presets = prepare_user_presets(role_presets.to_vec());
         self.presets = PreparedPresets::build(&entries, &user_presets, &host.patch_role_index)
             .expect("prepared user presets compile");

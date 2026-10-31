@@ -126,7 +126,7 @@ fn patch_cursor_previews_the_current_chord_with_the_candidate_patch() {
     else {
         panic!("expected candidate chord preview");
     };
-    assert_eq!(patch.as_deref(), Some("Pads/Pad 1.fxp"));
+    assert_eq!(patch.as_deref(), Some("Leads/Lead 1.fxp"));
     assert_eq!(
         notes
             .messages
@@ -148,7 +148,7 @@ fn space_in_the_patch_selector_replays_the_progression_with_the_candidate_patch(
 
     assert_eq!(
         patch,
-        PatchChange::Switch(Some("Leads/Lead 1.fxp".to_string()))
+        PatchChange::Switch(Some("Pads/Pad 1.fxp".to_string()))
     );
     assert_eq!(pitches(&program), vec![67, 71, 74, 66, 69, 74]);
 }
@@ -162,7 +162,7 @@ fn invalid_chord_chart_input_does_not_use_the_patch_fallback_note() {
     assert_eq!(
         overlay.handle_key(press(KeyCode::Down), now),
         MmlOverlayAction::SetPatch {
-            patch: Some("Pads/Pad 1.fxp".to_string()),
+            patch: Some("Leads/Lead 1.fxp".to_string()),
             notes: None,
         }
     );
@@ -206,7 +206,7 @@ fn patch_selector_replay_keeps_the_progression_context_and_shape() {
 
     assert_eq!(
         patch,
-        PatchChange::Switch(Some("Pads/Pad 1.fxp".to_string()))
+        PatchChange::Switch(Some("Leads/Lead 1.fxp".to_string()))
     );
     assert_eq!(pitches(&program), vec![67, 71, 74, 66, 69, 74]);
     assert!(program.repeat);

@@ -43,7 +43,7 @@ pub use open::PatchSelectRequest;
 use prepared::build_role_index;
 pub use prepared::PreparedPresets;
 use presets::{normalize_user_presets, patterns_for_role};
-pub use presets::{prepare_user_presets, FilterGroup, FilterPreset};
+pub use presets::{prepare_user_presets, preset_rank, FilterGroup, FilterPreset};
 
 pub(crate) use keys::is_patch_select_play_settings_trigger;
 

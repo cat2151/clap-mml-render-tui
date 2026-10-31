@@ -45,7 +45,7 @@ fn home_and_end_move_to_the_edges_of_the_focused_pane() {
 
     assert_eq!(
         previewed(select.handle_key(press(KeyCode::End))).as_deref(),
-        Some("Pads/Pad 1.fxp")
+        Some("Leads/Lead 2.fxp")
     );
     assert_eq!(
         previewed(select.handle_key(press(KeyCode::Home))).as_deref(),

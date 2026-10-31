@@ -105,7 +105,7 @@ fn keyboard_screen_shows_role_preset_and_patch_panes_while_connecting() {
     assert!(screen.contains("Role (1/7)"), "{screen}");
     assert!(screen.contains("Bass track"), "{screen}");
     assert!(screen.contains("Preset (1/"), "{screen}");
-    assert!(screen.contains("Patches (3/3)"), "{screen}");
+    assert!(screen.contains("Patches (2/3)"), "{screen}");
     assert!(screen.contains("Category"), "{screen}");
     assert!(screen.contains("Load"), "{screen}");
     assert!(

@@ -30,8 +30,8 @@ pub use patch_catalog::{
     PatchCatalogSnapshot,
 };
 pub use patch_select::{
-    filter_candidates, prepare_user_presets, AutoReverbHost, AutoReverbKey, AutoReverbPanel,
-    AutoReverbStatus, FilterGroup, FilterPreset, PatchSelect, PatchSelectAction,
+    filter_candidates, prepare_user_presets, preset_rank, AutoReverbHost, AutoReverbKey,
+    AutoReverbPanel, AutoReverbStatus, FilterGroup, FilterPreset, PatchSelect, PatchSelectAction,
     PatchSelectRequest, PreparedPresets, PAGE_STEP,
 };
 pub use play_settings::{is_play_settings_trigger, PlaySettings, PlaySettingsSelect};

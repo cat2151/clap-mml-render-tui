@@ -154,7 +154,7 @@ fn keyboard_j_and_k_move_the_focused_pane() {
     assert_eq!(preset(&app), "ALL");
     assert_eq!(
         app.keyboard.state.patch(),
-        Some("patches_factory/Pads/Pads 00.fxp")
+        Some("patches_factory/Strings/Strings 00.fxp")
     );
 
     press(&mut app, KeyCode::Char('l'), KeyModifiers::NONE);

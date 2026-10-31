@@ -390,7 +390,7 @@ fn the_chain_is_saved_and_survives_start_and_patch_changes() {
 
     // 音色を替えても画面側は chain を送り直さない（sender が覚えた chain を載せる）。
     press(&mut screen, 'h', &ctx);
-    press(&mut screen, 'j', &ctx);
+    press(&mut screen, 'k', &ctx);
     assert_eq!(screen.state.patch(), Some("Pads/Warm.fxp"));
     assert_eq!(screen.effect_pane().sounding(), [stage(0), stage(1)]);
 

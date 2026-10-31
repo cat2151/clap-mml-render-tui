@@ -122,7 +122,9 @@ fn installed_patches_belong_to_one_preset_row() {
     let crate::PatchCatalogSnapshot::Ready(mut all) = host.catalog else {
         panic!("catalog is not ready");
     };
-    crate::sort_for_selector(&mut all);
+    crate::sort_for_selector(&mut all, |entry| {
+        crate::preset_rank(&host.patch_role_index, entry.display())
+    });
     let prepared = prepare_presets(
         &all,
         &[],

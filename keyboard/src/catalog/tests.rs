@@ -69,7 +69,7 @@ fn focus_role(catalog: &mut KeyboardPatchCatalog) {
 #[test]
 fn load_selects_the_current_patch_without_changing_unknown_patch() {
     let catalog = loaded(Some("Leads/Lead 2.fxp"));
-    assert_eq!(catalog.selected_patch_index(), Some(1));
+    assert_eq!(catalog.selected_patch_index(), Some(13));
     assert_eq!(catalog.selected_patch(), Some("Leads/Lead 2.fxp"));
     assert_eq!(catalog.focus(), PatchPaneFocus::Patches);
     assert_eq!((catalog.role_cursor(), catalog.preset_cursor()), (0, 0));
@@ -89,20 +89,20 @@ fn patch_navigation_clamps_and_moves_by_ten() {
     );
     assert_eq!(
         catalog.move_focused_cursor(10).as_deref(),
-        Some("Pads/Pad 11.fxp")
+        Some("Leads/Lead 2.fxp")
     );
     assert_eq!(catalog.move_focused_cursor(1), None);
     assert_eq!(
         catalog.move_focused_cursor(-10).as_deref(),
-        Some("Pads/Pad 01.fxp")
+        Some("Pads/Pad 03.fxp")
     );
     assert_eq!(
         catalog.move_focused_cursor(isize::MIN).as_deref(),
-        Some("Leads/Lead 1.fxp")
+        Some("Pads/Pad 00.fxp")
     );
     assert_eq!(
         catalog.move_focused_cursor(isize::MAX).as_deref(),
-        Some("Pads/Pad 11.fxp")
+        Some("Leads/Lead 2.fxp")
     );
 }
 
@@ -112,7 +112,7 @@ fn first_navigation_from_an_unknown_patch_selects_the_first_patch() {
 
     assert_eq!(
         catalog.move_focused_cursor(-1).as_deref(),
-        Some("Leads/Lead 1.fxp")
+        Some("Pads/Pad 00.fxp")
     );
     assert_eq!(catalog.selected_patch_index(), Some(0));
 }

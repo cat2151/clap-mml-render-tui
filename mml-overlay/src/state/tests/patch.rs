@@ -147,7 +147,7 @@ fn moving_in_the_patch_select_previews_the_patch_with_the_note_at_the_cursor() {
     assert_eq!(
         overlay.handle_key(press(KeyCode::Down), now),
         MmlOverlayAction::SetPatch {
-            patch: Some("Pads/Pad 1.fxp".to_string()),
+            patch: Some("Leads/Lead 1.fxp".to_string()),
             notes: Some(NoteRequest {
                 messages: vec![[0x90, 64, 127]],
                 duration: Duration::from_millis(250),
@@ -165,7 +165,7 @@ fn previewing_an_empty_mml_sounds_the_fallback_note() {
     assert_eq!(
         overlay.handle_key(press(KeyCode::Down), now),
         MmlOverlayAction::SetPatch {
-            patch: Some("Pads/Pad 1.fxp".to_string()),
+            patch: Some("Leads/Lead 1.fxp".to_string()),
             // 試聴用の `c` を既定のオクターブ・velocity で鳴らす。
             notes: Some(NoteRequest {
                 messages: vec![[0x90, 60, 127]],
@@ -185,7 +185,7 @@ fn confirming_keeps_the_input_untouched() {
     overlay.handle_key(press(KeyCode::Enter), now);
 
     assert_eq!(overlay.value(), "cde");
-    assert_eq!(overlay.patch(), Some("Leads/Lead 1.fxp"));
+    assert_eq!(overlay.patch(), Some("Pads/Pad 1.fxp"));
     assert!(overlay.patch_select().is_none());
 }
 
@@ -194,6 +194,7 @@ fn cancelling_restores_the_patch_that_was_current_when_it_opened() {
     let mut overlay = opened_with(patches_with_two_leads());
     let now = Instant::now();
     overlay.handle_key(ctrl(KeyCode::Char('t')), now);
+    overlay.handle_key(press(KeyCode::Down), now);
     overlay.handle_key(press(KeyCode::Enter), now);
 
     overlay.handle_key(ctrl(KeyCode::Char('t')), now);
@@ -238,7 +239,7 @@ fn reopening_restores_the_patch_but_not_the_mml() {
     });
 
     assert_eq!(overlay.value(), "");
-    assert_eq!(overlay.patch(), Some("Leads/Lead 1.fxp"));
+    assert_eq!(overlay.patch(), Some("Pads/Pad 1.fxp"));
 }
 
 /// 音色一覧を開いたまま `Space` を押すと、選択中の音色で入力欄の現在行が鳴る。
@@ -256,7 +257,7 @@ fn space_in_the_patch_select_plays_the_current_line_with_the_selected_patch() {
 
     assert_eq!(
         patch,
-        PatchChange::Switch(Some("Pads/Pad 1.fxp".to_string()))
+        PatchChange::Switch(Some("Leads/Lead 1.fxp".to_string()))
     );
     assert_eq!(
         overlay.line_status(),
@@ -332,7 +333,7 @@ fn with_repeat_on_moving_the_patch_cursor_replays_the_whole_line() {
 
     assert_eq!(
         patch,
-        PatchChange::Switch(Some("Pads/Pad 1.fxp".to_string()))
+        PatchChange::Switch(Some("Leads/Lead 1.fxp".to_string()))
     );
     assert!(program.repeat);
     assert!(!program.is_silent());
@@ -351,7 +352,7 @@ fn with_repeat_on_an_empty_line_still_previews_the_fallback_note() {
     assert_eq!(
         overlay.handle_key(press(KeyCode::Down), now),
         MmlOverlayAction::SetPatch {
-            patch: Some("Pads/Pad 1.fxp".to_string()),
+            patch: Some("Leads/Lead 1.fxp".to_string()),
             notes: Some(NoteRequest {
                 messages: vec![[0x90, 60, 127]],
                 duration: Duration::from_millis(250),

@@ -13,6 +13,7 @@ mod navigation;
 mod pitched_percussion;
 mod plugin_menu;
 mod row_overlap;
+mod selector_order;
 mod start_cursor;
 
 fn press(code: KeyCode) -> KeyEvent {

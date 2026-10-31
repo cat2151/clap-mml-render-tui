@@ -75,7 +75,7 @@ fn uppercase_mutes_the_plugin_with_or_without_shift_modifier() {
     assert_eq!(query(&select), "-plugin:dexed -plugin:surgext");
     assert_eq!(
         filtered(&select),
-        ["Harp.floe-preset", "Piano.sfz", "Warm Pad.vvp"]
+        ["Warm Pad.vvp", "Piano.sfz", "Harp.floe-preset"]
     );
 }
 
@@ -115,7 +115,7 @@ fn solos_stack_and_show_any_of_the_soloed_plugins() {
     choose(&mut select, press(KeyCode::Char('v')));
 
     assert_eq!(query(&select), "plugin:floe plugin:vaporizer2");
-    assert_eq!(filtered(&select), ["Harp.floe-preset", "Warm Pad.vvp"]);
+    assert_eq!(filtered(&select), ["Warm Pad.vvp", "Harp.floe-preset"]);
 
     choose(&mut select, press(KeyCode::Char('f')));
     assert_eq!(query(&select), "plugin:vaporizer2");

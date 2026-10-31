@@ -10,8 +10,8 @@
 use std::{cell::Cell, collections::BTreeMap, sync::Arc, time::Instant};
 
 use cmrt_patch_select::{
-    host_patch_catalog, prepare_user_presets, sort_for_selector, AutoReverbPanel, FilterGroup,
-    FilterPreset, PatchCatalogEntry, PatchCatalogSnapshot, PreparedPresets,
+    host_patch_catalog, prepare_user_presets, preset_rank, sort_for_selector, AutoReverbPanel,
+    FilterGroup, FilterPreset, PatchCatalogEntry, PatchCatalogSnapshot, PreparedPresets,
 };
 use cmrt_realtime_play::PatchVoicing;
 use cmrt_tui_core::{
@@ -102,7 +102,9 @@ impl PatchSelector {
             // ここまで来たら一覧は空でない。消えたのは poly 絞り込みのせい。
             return Err(PatchUnavailable::NoPolyPatches);
         }
-        sort_for_selector(&mut entries);
+        sort_for_selector(&mut entries, |entry| {
+            preset_rank(&ctx.patch_roles, entry.display())
+        });
         let user_presets = prepare_user_presets(snapshot.role_presets().to_vec());
         auto_reverb.set_user_presets(&user_presets);
         let presets = PreparedPresets::build(&entries, &user_presets, &ctx.patch_roles)

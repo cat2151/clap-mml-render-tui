@@ -126,7 +126,7 @@ fn chord_row_selector_contains_only_confirmed_poly_patches() {
     assert_eq!(selector.total(), 3);
     assert_eq!(
         filtered_patches(selector),
-        ["Keys/Alpha.fxp", "Keys/Beta.fxp", "Pads/Poly.fxp"]
+        ["Pads/Poly.fxp", "Keys/Alpha.fxp", "Keys/Beta.fxp"]
     );
 }
 

@@ -184,14 +184,20 @@ fn page_and_home_end_keys_move_the_focused_pane() {
     screen.open_patch_selector(0, &ctx);
 
     screen.handle_patch_selector_key(press(KeyCode::End), &ctx);
-    assert_eq!(selector(&screen).selected_patch(), Some("Pads/Pad 01.fxp"));
+    assert_eq!(
+        selector(&screen).selected_patch(),
+        Some("Drums/Perc Clap 01.wav")
+    );
     screen.handle_patch_selector_key(press(KeyCode::Home), &ctx);
     assert_eq!(
         selector(&screen).selected_patch(),
         Some("Basses/Bass 01.fxp")
     );
     screen.handle_patch_selector_key(press(KeyCode::PageDown), &ctx);
-    assert_eq!(selector(&screen).selected_patch(), Some("Pads/Pad 01.fxp"));
+    assert_eq!(
+        selector(&screen).selected_patch(),
+        Some("Drums/Perc Clap 01.wav")
+    );
 
     screen.handle_patch_selector_key(press(KeyCode::Char('h')), &ctx);
     screen.handle_patch_selector_key(press(KeyCode::Char('h')), &ctx);
@@ -301,30 +307,30 @@ fn clicking_a_role_or_preset_selects_it_and_moves_the_focus_there() {
     assert_eq!(selector(&screen).focus(), PatchPaneFocus::Role);
     assert_eq!(
         selector(&screen).previewed_patch.as_deref(),
-        Some("Drums/Hi Hat 01.wav")
+        Some("Drums/Kick 01.wav")
     );
 
-    let kick = selector(&screen)
+    let hi_hat = selector(&screen)
         .presets()
         .iter()
-        .position(|preset| preset.label == "kick")
+        .position(|preset| preset.label == "hi-hat")
         .unwrap();
     screen.handle_patch_selector_mouse(
         mouse(
             MouseEventKind::Down(MouseButton::Left),
             layout.preset_list.x,
-            layout.preset_list.y + kick as u16,
+            layout.preset_list.y + hi_hat as u16,
         ),
         AREA,
         &ctx,
     );
     let selector = selector(&screen);
-    assert_eq!(preset_label(selector), "kick");
+    assert_eq!(preset_label(selector), "hi-hat");
     assert_eq!(selector.focus(), PatchPaneFocus::Preset);
-    assert_eq!(filtered_patches(selector), ["Drums/Kick 01.wav"]);
+    assert_eq!(filtered_patches(selector), ["Drums/Hi Hat 01.wav"]);
     assert_eq!(
         selector.previewed_patch.as_deref(),
-        Some("Drums/Kick 01.wav")
+        Some("Drums/Hi Hat 01.wav")
     );
 }
 

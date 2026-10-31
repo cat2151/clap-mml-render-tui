@@ -122,7 +122,20 @@ impl PatchCatalogEntry {
     }
 }
 
-/// selector が見せる順に整列する。Category 無しを末尾へ送り、残りを Category / plugin / patch 名の順にする。
-pub fn sort_for_selector(entries: &mut [PatchCatalogEntry]) {
-    entries.sort_by(|left, right| left.selector_sort_key().cmp(&right.selector_sort_key()));
+/// selector が見せる順に整列する。`preset_rank`（[`crate::preset_rank`] の値）の順を最上位にし、
+/// 同じ順位の中は Category 無しを末尾へ送り、残りを Category / plugin / patch 名の順にする。
+pub fn sort_for_selector(
+    entries: &mut [PatchCatalogEntry],
+    preset_rank: impl Fn(&PatchCatalogEntry) -> usize,
+) {
+    let mut keyed: Vec<_> = entries
+        .iter()
+        .map(|entry| (preset_rank(entry), entry.clone()))
+        .collect();
+    keyed.sort_by(|(left_rank, left), (right_rank, right)| {
+        (left_rank, left.selector_sort_key()).cmp(&(right_rank, right.selector_sort_key()))
+    });
+    for (slot, (_, entry)) in entries.iter_mut().zip(keyed) {
+        *slot = entry;
+    }
 }

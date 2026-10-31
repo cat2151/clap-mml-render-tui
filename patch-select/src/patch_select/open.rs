@@ -51,11 +51,11 @@ impl PatchSelect<'_> {
         if all.is_empty() {
             return None;
         }
-        sort_for_selector(&mut all);
         let user_presets = prepare_user_presets(user_presets);
         if role_index.is_empty() {
             role_index = build_role_index(&all, &user_presets);
         }
+        sort_for_selector(&mut all, |entry| preset_rank(&role_index, entry.display()));
         let prepared_presets = prepare_presets(
             &all,
             &user_presets,
