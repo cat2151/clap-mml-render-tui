@@ -1,18 +1,18 @@
 # clap-mml-render-tui
 
-### 概要
+## 概要
 MML TUI DAW（のようなもの）。[Surge XT](https://surge-synthesizer.github.io/) / [Dexed](https://asb2m10.github.io/dexed/) / [Vaporizer2](https://www.vast-dynamics.com/?q=Vaporizer2) / [Floe](https://floe.audio/) / [Sforzando](https://www.plogue.com/products/sforzando.html) / [Six Sines](https://github.com/baconpaul/six-sines) / [TyrellN6](https://u-he.com/products/tyrelln6/) / [TONE3000](https://www.tone3000.com/) / [Dragonfly Reverb](https://michaelwillis.github.io/dragonfly-reverb/) / [Voyage Voyage](https://www.musicalentropy.com/VoyageVoyage.html) / [Shu](https://mikey.audio/shu) / [METAL-GTX](https://unreal-instruments.wixsite.com/unreal-instruments/metal-gtx) のリッチな音をMMLで手軽に楽しめます。Rustで書かれています。
 
-### 用途
+## 用途
 
 - MMLで音を鳴らして遊ぶ用
 - カジュアルにインストールする用。RustがあるだけでOK
 
-### 技術スタック
+## 技術スタック
 - プラグインホスト用ライブラリ
   - https://github.com/prokopyl/clack
 
-### 準備
+## 準備
 
 [Surge XT](https://surge-synthesizer.github.io/)をinstallしてください
 
@@ -20,36 +20,29 @@ MML TUI DAW（のようなもの）。[Surge XT](https://surge-synthesizer.githu
 winget install "Surge XT"
 ```
 
-### install
+## install
 
 ``` 
 cargo install --force --git https://github.com/cat2151/clap-mml-render-tui
 ```
 
-### 実行
+## 実行
 
 ```
 cmrt
 ```
 
-TUI画面でMML入力して遊べます
+TUI画面でMMLを入力して遊べます
 
-#### play serverの実体
+## 音色catalog
 
-音を鳴らすのは別プロセスの play server です。実体は次の順で決まり、最初に見つかったものを使います。
-
-1. `--play-server <PATH>` で指定したフルパス（指定したものが無ければ、探索へ移らずエラーで止まります）
-2. `cmrt` と同じディレクトリの `clap-mml-realtime-play-server`
-3. 兄弟リポジトリの release ビルド（`../clap-mml-play-server/target/release/`）
-
-PATHは見ません。debugビルドのサーバーは先読みが4〜5倍遅く、演奏が小節の頭で途切れます。
-debugビルドや素性の分からない実体を掴んでいるときは、画面の右上に警告が出ます。
+Dexedなどの音色catalogを作成し、絞り込みなどに活用できます
 
 ```
-cmrt --play-server "X:/projects/clap-mml-play-server/target/debug/clap-mml-realtime-play-server.exe"
+cmrt build-patch-catalog-cache
 ```
 
-### 対応オーディオプラグイン
+## 対応オーディオプラグイン
 - ※CLAP、Windows、アカウント登録なしで無料で入手できるもの、に絞っています
 - [Surge XT](https://surge-synthesizer.github.io/)
 - [Dexed](https://asb2m10.github.io/dexed/)
@@ -80,8 +73,25 @@ cmrt --play-server "X:/projects/clap-mml-play-server/target/debug/clap-mml-realt
   - [Shu](https://mikey.audio/shu)
   - [METAL-GTX](https://unreal-instruments.wixsite.com/unreal-instruments/metal-gtx) 
 
-### AI生成ドキュメント
+## AI生成ドキュメント
 - 以降、AIが追記した部分が読みづらいです。ときどきメンテしていきます
+- AIはこの欄だけに書いてください。ほかの欄に書くことを禁じます
+
+### play serverの実体
+
+音を鳴らすのは別プロセスの play server です。実体は次の順で決まり、最初に見つかったものを使います。
+
+1. `--play-server <PATH>` で指定したフルパス（指定したものが無ければ、探索へ移らずエラーで止まります）
+2. `cmrt` と同じディレクトリの `clap-mml-realtime-play-server`
+3. 兄弟リポジトリの release ビルド（`../clap-mml-play-server/target/release/`）
+
+PATHは見ません。debugビルドのサーバーは先読みが4〜5倍遅く、演奏が小節の頭で途切れます。
+debugビルドや素性の分からない実体を掴んでいるときは、画面の右上に警告が出ます。
+
+```
+cmrt --play-server "X:/projects/clap-mml-play-server/target/debug/clap-mml-realtime-play-server.exe"
+```
+
 
 ### keyboard画面
 
@@ -402,13 +412,14 @@ cmrt render-mml --patch "AR Accent Arp.vvp"
 cmrt render-mml --config C:\tmp\try.toml --out-dir C:\tmp\wav --patch "PD Juno Dream Pad.vvp" --poly-check
 ```
 
-# 破壊的変更
+以上、AIが書いた文章が混ざって非常に読みづらい欄でした。あとで修正予定です
+
+AIは上記の欄以外に書くことを禁じます
+
+## 破壊的変更
 - 毎日頻繁に破壊的変更します
 
-# 今後
-- Surge XTのpatchesはAPIで取得するのが筋なのでそうする（今はtomlで指定したものを探索しており非効率。実装タイミングは後回し。ほかを優先している）
-
-# コンセプトのメモ
+## コンセプトのメモ
 - アトミック小節
     - Obsidianのアトミックノートに着想を得たものです。
     - あらゆる処理の単位を、「1小節単位のオフラインレンダリング」にすることで、
@@ -417,6 +428,14 @@ cmrt render-mml --config C:\tmp\try.toml --out-dir C:\tmp\wav --patch "PD Juno D
     - これはスケッチ用途、素早く編集のサイクルをまわす用途に向きます。
     - より本格的な編集が必要なら、既存の高機能なDAWのほうが向くでしょう。
     - ※atomic measure だと物理学の言葉になってしまうので、ひとまず英訳せず「アトミック小節」のままにしておきます。
+- 実験
+    - いろいろな実験を実装します
+- 自分専用
+    - 破壊的変更を頻繁に行います
+    - 昨日まで動いていたものが今日は動かない、といったことは日常茶飯時です
 
-# スコープ外
-- effectは編集必須なので割り切って、スコープ外、かなり後ろに後回し、とする。Surge XTの場合patchesがeffectsを内包している（effectsはpatchesから切り出したものである）、という点も理由の一つ
+## スコープ外
+- 実用性
+
+## ライセンス
+- MIT
