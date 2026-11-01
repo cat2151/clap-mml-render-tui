@@ -212,11 +212,9 @@ fn random_selection_visits_every_other_patch_without_duplicates() {
     let previous = catalog.selected_patch().map(str::to_string);
     assert_ne!(catalog.select_random_patch(), previous);
 
-    catalog.select(2);
-    assert_ne!(
-        catalog.select_random_patch().as_deref(),
-        Some("Pads/Pad 00.fxp")
-    );
+    let selected = catalog.select(2);
+    assert!(selected.is_some());
+    assert_ne!(catalog.select_random_patch(), selected);
 }
 
 #[test]
