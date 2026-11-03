@@ -88,15 +88,15 @@ fn patch_select_help_screen_shows_patch_select_shortcuts() {
     let normalized_screen = lines.join("\n").replace([' ', '\n'], "");
 
     assert!(normalized_screen.contains("音色選択モード"));
-    assert!(normalized_screen.contains("/:Regex絞り込み(Role・PresetとAND)"));
+    assert!(normalized_screen.contains("/:Regex絞り込み(Role・TypeとAND)"));
     assert!(normalized_screen.contains("n/p/t:notepadhistory/patchhistory/音色選択"));
     assert!(!normalized_screen.contains("Ctrl+S"));
     assert!(!normalized_screen.contains("sort"));
     assert!(normalized_screen.contains("f:現在音色とMMLをFavorites追加"));
-    assert!(normalized_screen.contains("h/l・←/→:ペイン移動(Role/Preset/音色)"));
+    assert!(normalized_screen.contains("h/l・←/→:ペイン移動(Role/Type/音色)"));
     assert!(normalized_screen.contains("PgUp/PgDn・Home/End:10行/先頭・末尾へ移動して再生"));
     assert!(normalized_screen.contains("r:ランダムな音色へ移動して再生"));
-    assert!(normalized_screen.contains("a:RegexをPresetに追加"));
+    assert!(normalized_screen.contains("a:RegexをTypeに追加"));
     assert!(normalized_screen.contains("m:pluginsolo/mute"));
     assert!(normalized_screen.contains("e/E:autoreverbon/off/ルール編集"));
     // overlay の中のキーは overlay 側に出すので、ここには書かない。

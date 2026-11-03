@@ -2,7 +2,7 @@
 
 - 状態: 採用
 - 決定者: user（Role=ALL でも各 Role でも、一覧を Preset の順に並べること。`sort_for_selector` を変えて並べること）
-- 関連: [0007](0007-patch-role-defaults-three-layers.md)
+- 関連: [0007](0007-patch-role-defaults-three-layers.md) / [0030](0030-patch-selector-type-pane-label.md)（Preset 欄は画面では `Type` と表示する）
 
 ## 決定
 
@@ -27,4 +27,5 @@
 
 - 一覧は Role の順（Bass → Chord → Lead → Drum → Triggered → Etc）に並ぶ。Chord の中では strings が pad より先に来るなど、組み込み preset の順に並ぶ。
 - 組み込み preset の並びを変えると、一覧の並びも変わる。
+- この欄は cmrt・cat-plugin-player とも画面では `Type` と表示し、保存キーとコードは `preset` のまま使う（[0030](0030-patch-selector-type-pane-label.md)・[cat-plugin-player ADR 0042](../../../cat-plugin-player/docs/adr/0042-type-pane-keeps-preset-key.md)）。コードや保存キーの名前を cmrt 側で変えると、cat-plugin-player も揃え直すことになる。
 - 35738 件の catalog で、並べ替えを含む cat-plugin-player の Snapshot 構築は 0.86 秒（別スレッドで動く）。

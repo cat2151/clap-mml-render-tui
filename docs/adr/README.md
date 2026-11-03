@@ -10,6 +10,7 @@
 0027 は先頭 JSON 付き MML を「;」でトラックに分けた形を扱わないこと。
 0028 は patch selector の一覧をどの Role でも Preset 欄の順に並べること。
 0029 は `cmrt.exe` と2つのサーバーの exe を静的リンクの zip にし、CI で毎日公開すること。
+0030 は patch selector の Preset 欄を画面では `Type` と呼び、保存形式とコードの名前は変えないこと。
 利用者向けの現行仕様は `README.ja.md` にある。
 
 ここに載っている実装はすべて完了済み。
@@ -49,3 +50,4 @@ play-server 側（プラグインの実測仕様・実行時の設計）は
 | [0027](0027-leading-json-with-semicolon-tracks-is-out-of-scope.md) | 先頭 JSON 付き MML を「;」でトラックに分けた形は扱わない（運用データに無いので、対応も報告もしない） |
 | [0028](0028-selector-list-follows-preset-order.md) | patch selector の一覧は、どの Role でも Preset 欄の順に並べる |
 | [0029](0029-daily-static-crt-release.md) | `cmrt.exe` と2つのサーバーの exe を静的リンクの zip にし、CI で毎日公開する |
+| [0030](0030-patch-selector-type-pane-label.md) | patch selector の Preset 欄は画面では `Type` と呼び、保存形式とコードは `preset` のまま |

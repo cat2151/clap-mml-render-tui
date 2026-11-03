@@ -43,7 +43,7 @@ fn the_screen_draws_role_preset_and_patch_panes_inside_the_patch_selector_frame(
 
     for expected in [
         " Role (1/7)",
-        " Preset (1/",
+        " Type (1/",
         " Patches (1/3)",
         "Category",
         "Patch",

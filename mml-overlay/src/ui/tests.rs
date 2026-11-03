@@ -157,7 +157,7 @@ fn draws_the_patch_select_over_the_input() {
 
     assert!(rendered.contains("Enter:"), "{rendered}");
     assert!(rendered.contains("Role"), "{rendered}");
-    assert!(rendered.contains("Preset"), "{rendered}");
+    assert!(rendered.contains(" Type "), "{rendered}");
     assert!(rendered.contains("Bass › bass|bs"), "{rendered}");
     assert!(rendered.contains("Category"), "{rendered}");
     assert!(rendered.contains("Leads"), "{rendered}");

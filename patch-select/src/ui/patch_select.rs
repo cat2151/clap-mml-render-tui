@@ -192,11 +192,11 @@ fn draw_groups(select: &PatchSelect<'_>, frame: &mut Frame<'_>, area: Rect) {
 
 fn draw_presets(select: &PatchSelect<'_>, frame: &mut Frame<'_>, area: Rect) {
     if select.drum_kit_only() {
-        draw_fixed_pane(" Preset (固定) ", "Drum kit", frame, area);
+        draw_fixed_pane(" Type (固定) ", "Drum kit", frame, area);
         return;
     }
     let block = pane_block(
-        " Preset  A:add ".to_string(),
+        " Type  A:add ".to_string(),
         select.focus() == PatchSelectFocus::Presets,
     );
     let rows = select

@@ -192,7 +192,7 @@ fn draw_presets(catalog: &mut KeyboardPatchCatalog, f: &mut Frame<'_>, area: Rec
             ListItem::new(format!("{prefix}{}", preset.label))
         })
         .collect::<Vec<_>>();
-    let title = format!(" Preset ({}/{}) ", catalog.preset_cursor() + 1, items.len());
+    let title = format!(" Type ({}/{}) ", catalog.preset_cursor() + 1, items.len());
     let focused = catalog.focus() == PatchPaneFocus::Preset;
     f.render_stateful_widget(
         List::new(items)

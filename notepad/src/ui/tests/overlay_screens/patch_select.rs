@@ -37,7 +37,7 @@ fn patch_select_screen_renders_the_shared_three_panes_over_the_normal_screen() {
 
     assert!(lines.contains("[PATCH SELECT] notepad mode"), "{lines}");
     assert!(lines.contains("Role"), "{lines}");
-    assert!(lines.contains("Preset"), "{lines}");
+    assert!(lines.contains(" Type "), "{lines}");
     assert!(lines.contains("★ Favorite"), "{lines}");
     assert!(lines.contains("Pads/Pad 1.fxp"), "{lines}");
     assert!(normalized.contains("現在1行目/全2行(1/2)"), "{lines}");

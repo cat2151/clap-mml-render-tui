@@ -34,7 +34,7 @@ fn the_patch_selector_overlay_shows_the_three_panes_and_the_patches() {
 
     assert!(rendered.contains("instance 1 patch select"), "{rendered}");
     assert!(rendered.contains(" Role "), "{rendered}");
-    assert!(rendered.contains(" Preset "), "{rendered}");
+    assert!(rendered.contains(" Type "), "{rendered}");
     assert!(rendered.contains("Patches (1/2/2)"), "{rendered}");
     // 音色名は grid の PATCH 欄にも出る。selector の行だけが `▶ ` を持つ。
     let patch_lines = |patch: &str| {
@@ -250,7 +250,7 @@ fn the_bass_row_opens_with_the_patch_table_header_and_the_bass_role_selected() {
     let rendered = buffer_to_string(&wide_terminal(&screen));
 
     assert!(rendered.contains(" Role "), "{rendered}");
-    assert!(rendered.contains(" Preset "), "{rendered}");
+    assert!(rendered.contains(" Type "), "{rendered}");
     assert!(rendered.contains(" Patches ("), "{rendered}");
     let header = rendered
         .lines()

@@ -69,12 +69,12 @@ fn patch_overlay_close_and_notepad_to_grid_redraw_leave_no_old_labels() {
         ));
     assert_eq!(app.notepad.mode, Mode::PatchSelect);
     terminal.draw(|frame| draw(&mut app, frame)).unwrap();
-    assert!(text(terminal.backend().buffer()).contains("Preset"));
+    assert!(text(terminal.backend().buffer()).contains(" Type "));
 
     app.notepad.mode = Mode::Normal;
     terminal.draw(|frame| draw(&mut app, frame)).unwrap();
     let normal = text(terminal.backend().buffer());
-    assert!(!normal.contains("Preset"));
+    assert!(!normal.contains(" Type "));
     assert!(normal.contains("notepad mode"));
 
     app.active_screen = PrimaryScreen::GridSequencer;

@@ -59,7 +59,7 @@ pub(super) fn keybind_text(mode: &Mode) -> &'static str {
             "q ?:help e:config b:loops i:編集 o/O:挿入 dd/Del:cut p/P:貼付 f:phrase g:generate r:ランダム音色 t:音色 x:effect Shift+H:patch history j/k・↑↓・PgUp/PgDn・Home/M:再生移動 Enter/Space w:DAW v:keyboard Ctrl+G:screens"
         }
         Mode::PatchSelect => {
-            "/:Regex検索  Enter:検索確定/決定  Space:再生  ESC:キャンセル  n/p/t:overlay切替  f:お気に入り  a:preset追加  r:ランダム  h/l・←/→:ペイン移動  j/k・↑↓・PgUp/PgDn・Home/End:移動して再生"
+            "/:Regex検索  Enter:検索確定/決定  Space:再生  ESC:キャンセル  n/p/t:overlay切替  f:お気に入り  a:Type追加  r:ランダム  h/l・←/→:ペイン移動  j/k・↑↓・PgUp/PgDn・Home/End:移動して再生"
         }
         Mode::NotepadHistory => {
             "/:検索入力  Enter:検索確定/確定  ESC:閉じる  n/p/t:overlay切替  h/l・←/→:ペイン移動  j/k・↑↓:移動して再生  PgUp/PgDn:1画面移動  f:お気に入り  dd:削除"

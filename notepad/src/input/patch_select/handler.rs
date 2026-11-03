@@ -110,7 +110,7 @@ impl<'a> NotepadScreen<'a> {
             PatchSelectAction::SaveUserPresets { presets, preview } => {
                 if let Err(error) = cmrt_history::save_mml_patch_filter_presets(&presets) {
                     *self.playback.session.play_state().lock().unwrap() =
-                        crate::PlayState::Err(format!("preset の保存に失敗: {error}"));
+                        crate::PlayState::Err(format!("Type の保存に失敗: {error}"));
                 }
                 if preview.is_some() {
                     self.preview_selected_patch();

@@ -75,7 +75,7 @@ pub(super) fn draw(f: &mut Frame<'_>, screen: &GridSequencerScreen) {
     f.render_widget(
         pane_list(
             presets,
-            " Preset ",
+            " Type ",
             selector.focus() == PatchPaneFocus::Preset,
         ),
         layout.preset_pane,
