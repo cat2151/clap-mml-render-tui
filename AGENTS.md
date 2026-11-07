@@ -32,6 +32,8 @@ The setup script installs the Linux packages needed for this workspace's `rodio`
 - cat2151のライブラリは、「revision固定を禁止。さらに、古い lock を放置せず最新 HEAD へ追従すること」
 - issue-notes/は更新を禁止
 - README.mdは更新禁止。README.ja.mdから生成されるので。
+- README.ja.mdは人間だけが書く。AIの更新を禁止
+- 現行仕様の一次情報は、コード、各画面の`?` help、生成されるconfig.toml、`cmrt --help`。設計の理由は`docs/adr/`
 - ./target/release に clap-mml-realtime-play-server.exe をアドホックにcpすることを禁止（根が深いトラブルの温床になった）。
 - ビルドロック回避を含め、`--target-dir`等で既定以外のtargetディレクトリを作成・使用することを禁止
 

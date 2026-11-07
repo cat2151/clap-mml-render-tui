@@ -11,7 +11,7 @@
 0028 は patch selector の一覧をどの Role でも Preset 欄の順に並べること。
 0029 は `cmrt.exe` と2つのサーバーの exe を静的リンクの zip にし、CI で毎日公開すること。
 0030 は patch selector の Preset 欄を画面では `Type` と呼び、保存形式とコードの名前は変えないこと。
-利用者向けの現行仕様は `README.ja.md` にある。
+現行の操作と設定は、各画面の `?` help、生成される `config.toml`、`cmrt --help` にある。
 
 ここに載っている実装はすべて完了済み。
 

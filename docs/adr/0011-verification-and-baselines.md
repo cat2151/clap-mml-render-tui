@@ -9,7 +9,7 @@ grid sequencer の PATCH 欄の wheel が引く候補は「config の用途別�
 「patch ごとの mono/poly 判定」の 3 つで決まる。プラグインを替えたときにどれか 1 つでも
 噛み合わないと wheel が無反応になるが、それを見るには画面を開いて全行の wheel を
 回すしかなかった。これを画面なしで数え、**候補 0 件の行があれば終了コード 1** で終わる。
-使い方は README.ja.md の「patch-roles コマンド」。
+使い方は `cmrt patch-roles --help`。
 
 **設計の肝**: `grid-sequencer/src/patch_role.rs` の `row_patch_purpose()` に行→用途の対応を
 1 か所へ寄せ、**候補を数える述語を wheel と CLI で 1 本にした**。
@@ -53,7 +53,7 @@ drum 行の表は track 7 固定（track 4 は drum 行が 1 つで役割が抽�
 ## `cmrt render-mml` — 画面を開かずにオフラインで鳴らす
 
 `patch-roles` が「**一覧に出るか**」を数えるのに対し、こちらは「**出た音色が実際に音になるか**」を見る。
-使い方は README.ja.md の「render-mml コマンド」。1 レンダリングにつき 1 行出す。
+使い方は `cmrt render-mml --help`。1 レンダリングにつき 1 行出す。
 
 | 見るもの | 落ちる壊れ方 |
 |---|---|

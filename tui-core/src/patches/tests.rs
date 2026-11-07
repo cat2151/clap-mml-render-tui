@@ -231,7 +231,7 @@ fn adapter_resolved_paths_are_used_without_rescanning_vendor_files() {
     std::fs::create_dir_all(&bank).unwrap();
     std::fs::write(bank.join("Piano.sfz"), b"<region>").unwrap();
     std::fs::write(bank.join("Not Sforzando.fxp"), b"state").unwrap();
-    let piano = std::fs::canonicalize(bank.join("Piano.sfz")).unwrap();
+    let piano = bank.join("Piano.sfz");
     let plugin = CatalogPlugin {
         name: "adapter fixture".to_string(),
         plugin_path: "adapter.clap".to_string(),

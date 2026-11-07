@@ -12,7 +12,6 @@ mod header;
 mod help;
 mod layout;
 mod line_input;
-mod readme;
 mod sections;
 mod text;
 
