@@ -3,6 +3,10 @@
 ## 概要
 MML TUI DAW（のようなもの）。[Surge XT](https://surge-synthesizer.github.io/) / [Dexed](https://asb2m10.github.io/dexed/) / [Vaporizer2](https://www.vast-dynamics.com/?q=Vaporizer2) / [Floe](https://floe.audio/) / [Sforzando](https://www.plogue.com/products/sforzando.html) / [Six Sines](https://github.com/baconpaul/six-sines) / [TyrellN6](https://u-he.com/products/tyrelln6/) / [TONE3000](https://www.tone3000.com/) / [Dragonfly Reverb](https://michaelwillis.github.io/dragonfly-reverb/) / [Voyage Voyage](https://www.musicalentropy.com/VoyageVoyage.html) / [Shu](https://mikey.audio/shu) / [METAL-GTX](https://unreal-instruments.wixsite.com/unreal-instruments/metal-gtx) のリッチな音を、MMLで手軽に楽しめます。Rustで書かれています。
 
+## ダウンロード
+
+[Windows版をダウンロード](https://github.com/cat2151/clap-mml-render-tui/releases/download/v0.1.0/clap-mml-render-tui-0.1.0-windows-x64.zip)
+
 ## 用途
 
 - MML(Music Macro Language)で音を鳴らして遊ぶ用
@@ -11,10 +15,6 @@ MML TUI DAW（のようなもの）。[Surge XT](https://surge-synthesizer.githu
 ## 技術スタック
 - プラグインホスト用ライブラリ
   - https://github.com/prokopyl/clack
-
-## ダウンロード
-
-[Windows版をダウンロード](https://github.com/cat2151/clap-mml-render-tui/releases/download/v0.1.0/clap-mml-render-tui-0.1.0-windows-x64.zip)
 
 ## 準備
 
