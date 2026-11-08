@@ -59,6 +59,8 @@ cmrt build-patch-catalog-cache
   - [Shu](https://mikey.audio/shu)
 - sfz（のうち、専用画面でキースイッチとコントロールチェンジを試せるもの）
   - [METAL-GTX](https://unreal-instruments.wixsite.com/unreal-instruments/metal-gtx) 
+- sfz（のDrum kit）
+  - sfzのdrum kitなら、どれでも自動で対応できているつもり
 - それぞれのダウンロード画面（迷子になった人向け）
   - Surge XT : wingetで入手が楽です : [最速！猫でもインストールできるDAWとオーディオプラグイン（仮想MIDI鍵盤で音を鳴らすまで）](https://cat2151.hatenadiary.jp/entry/2026/03/12/225148)
   - [Dexed（studiorack-siteでの紹介ページ）](https://studiorack.github.io/studiorack-site/plugins/asb2m10/dexed)
