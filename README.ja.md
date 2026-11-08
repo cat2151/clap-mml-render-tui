@@ -5,12 +5,16 @@ MML TUI DAW（のようなもの）。[Surge XT](https://surge-synthesizer.githu
 
 ## 用途
 
-- MMLで音を鳴らして遊ぶ用
+- MML(Music Macro Language)で音を鳴らして遊ぶ用
 - 自分用。実験プロジェクト
 
 ## 技術スタック
 - プラグインホスト用ライブラリ
   - https://github.com/prokopyl/clack
+
+## ダウンロード
+
+[Windows版をダウンロード](https://github.com/cat2151/clap-mml-render-tui/releases/download/v0.1.0/clap-mml-render-tui-0.1.0-windows-x64.zip)
 
 ## 準備
 
@@ -21,14 +25,6 @@ winget install "Surge XT"
 ```
 
 ※検討中 : 上記の自動化（ cat-plugin-player で実現済み）
-
-## install
-
-``` 
-cargo install --force --git https://github.com/cat2151/clap-mml-render-tui
-```
-
-※検討中 : 自動release
 
 ## 実行
 
