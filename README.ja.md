@@ -36,7 +36,7 @@ TUI画面でMMLを入力して遊べます
 
 ## 音色catalog
 
-Dexedなどの音色catalogを作成し、絞り込みなどに活用できます
+Dexedなどの音色catalogを作成します。対応オーディオプラグインの音色を楽に選べるようになります
 
 ```
 cmrt build-patch-catalog-cache
