@@ -73,12 +73,6 @@ cmrt build-patch-catalog-cache
   - [Shu](https://mikey.audio/shu)
   - [METAL-GTX](https://unreal-instruments.wixsite.com/unreal-instruments/metal-gtx) 
 
-## update
-
-```
-cmrt update
-```
-
 ## SNSの投稿を音楽として鳴らす
 
 ```
@@ -105,6 +99,15 @@ cmrt --server
     - 破壊的変更を頻繁に行います
         - 昨日saveしたファイルが今日loadできないのは日常茶飯事となります
             - なので利用はおもちゃレベルにとどめてください
+
+## Rustユーザー向けの補足
+
+cargoでinstallすると、セルフアップデートで楽に最新版を取得できます
+
+``` 
+cargo install --force --git https://github.com/cat2151/clap-mml-render-tui
+cmrt update
+```
 
 ## スコープ外
 - 実用性
