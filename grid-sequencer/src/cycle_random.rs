@@ -20,6 +20,9 @@
 //! SWING だけは譜面の分割と直交する。行の役割に関わらず全行へ配り、実際に跳ねるかは
 //! その行の譜面が決める。末尾に足してあるのは、既存項目の数字キーを動かさないため。
 //!
+//! overlay には項目の下へ、catalog の plugin ごとの出現率の行も並ぶ
+//! （[`crate::plugin_weight`]）。
+//!
 //! 描画と当たり判定は [`crate::ui::cycle_random`]。
 
 use crossterm::event::KeyCode;
@@ -189,30 +192,53 @@ impl CycleRandom {
     }
 }
 
-/// overlay のカーソル位置だけを持つ。設定そのものは [`CycleRandom`] 側。
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+/// overlay の1行。項目の行のあとに plugin の行が続く。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum CycleRandomRow<'a> {
+    Item(CycleRandomItem),
+    Plugin(&'a str),
+}
+
+/// overlay のカーソル位置と、開いたときの catalog の plugin 名。
+/// 設定そのものは [`CycleRandom`] と [`crate::PluginWeights`] 側。
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct CycleRandomOverlay {
     cursor: usize,
+    plugins: Vec<String>,
 }
 
 impl CycleRandomOverlay {
-    pub(crate) fn cursor(self) -> usize {
+    pub(crate) fn cursor(&self) -> usize {
         self.cursor
     }
 
-    pub(crate) fn selected(self) -> CycleRandomItem {
-        CycleRandomItem::ALL[self.cursor]
+    pub(crate) fn plugins(&self) -> &[String] {
+        &self.plugins
+    }
+
+    fn row_count(&self) -> usize {
+        CycleRandomItem::ALL.len() + self.plugins.len()
+    }
+
+    pub(crate) fn row(&self, index: usize) -> Option<CycleRandomRow<'_>> {
+        match CycleRandomItem::ALL.get(index) {
+            Some(item) => Some(CycleRandomRow::Item(*item)),
+            None => self
+                .plugins
+                .get(index - CycleRandomItem::ALL.len())
+                .map(|plugin| CycleRandomRow::Plugin(plugin)),
+        }
     }
 
     fn set_cursor(&mut self, index: usize) {
-        if index < CycleRandomItem::ALL.len() {
+        if index < self.row_count() {
             self.cursor = index;
         }
     }
 
     /// 上下端で止める。巡回させると、端まで来たことが分からない。
     fn move_cursor(&mut self, delta: isize) {
-        let last = CycleRandomItem::ALL.len() as isize - 1;
+        let last = self.row_count() as isize - 1;
         self.cursor = (self.cursor as isize + delta).clamp(0, last) as usize;
     }
 }
@@ -227,16 +253,23 @@ impl GridSequencerScreen {
         self.cycle_random_overlay.is_some()
     }
 
+    #[cfg(test)]
     pub(crate) fn cycle_random_cursor(&self) -> Option<usize> {
-        self.cycle_random_overlay.map(CycleRandomOverlay::cursor)
+        self.cycle_random_overlay
+            .as_ref()
+            .map(CycleRandomOverlay::cursor)
     }
 
-    /// `a` キー。overlay を開く（開いていれば閉じる）。
-    pub(crate) fn toggle_cycle_random_overlay(&mut self) {
+    pub(crate) fn cycle_random_overlay(&self) -> Option<&CycleRandomOverlay> {
+        self.cycle_random_overlay.as_ref()
+    }
+
+    /// `a` キー。overlay を開く（開いていれば閉じる）。`plugins` は plugin 行に並べる名前。
+    pub(crate) fn toggle_cycle_random_overlay(&mut self, plugins: Vec<String>) {
         self.cancel_mouse_gesture();
         self.cycle_random_overlay = match self.cycle_random_overlay {
             Some(_) => None,
-            None => Some(CycleRandomOverlay::default()),
+            None => Some(CycleRandomOverlay { cursor: 0, plugins }),
         };
     }
 
@@ -292,17 +325,15 @@ impl GridSequencerScreen {
     /// カーソルは値を取り出してから書き戻す。`self` の可変借用を握ったまま
     /// `set_cycle_random` を呼べないため。
     pub(crate) fn handle_cycle_random_key(&mut self, key: crossterm::event::KeyEvent) {
-        let Some(mut overlay) = self.cycle_random_overlay else {
+        let Some(mut overlay) = self.cycle_random_overlay.take() else {
             return;
         };
         match key.code {
-            KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('a') => {
-                self.close_cycle_random_overlay();
-                return;
-            }
+            // overlay は take 済みなので、書き戻さなければ閉じる。
+            KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('a') => return,
             KeyCode::Up | KeyCode::Char('k') => overlay.move_cursor(-1),
             KeyCode::Down | KeyCode::Char('j') => overlay.move_cursor(1),
-            KeyCode::Char(' ') | KeyCode::Enter => self.toggle_cycle_random(overlay.selected()),
+            KeyCode::Char(' ') | KeyCode::Enter => self.toggle_cycle_random_row(&overlay),
             KeyCode::Char('A') => self.set_all_cycle_random(true),
             KeyCode::Char('N') => self.set_all_cycle_random(false),
             KeyCode::Char(digit @ '1'..='7') => {
@@ -322,18 +353,27 @@ impl GridSequencerScreen {
         row: u16,
         area: ratatui::layout::Rect,
     ) {
-        let Some(mut overlay) = self.cycle_random_overlay else {
+        let Some(mut overlay) = self.cycle_random_overlay.take() else {
             return;
         };
-        match crate::ui::cycle_random::hit_test(area, column, row) {
+        match crate::ui::cycle_random::hit_test(area, overlay.plugins(), column, row) {
             Some(Some(index)) => {
                 overlay.set_cursor(index);
-                self.toggle_cycle_random(CycleRandomItem::ALL[index]);
-                self.cycle_random_overlay = Some(overlay);
+                self.toggle_cycle_random_row(&overlay);
             }
             // 枠の中の、項目でないところ。閉じない（誤爆で設定画面が消えない）。
             Some(None) => {}
-            None => self.close_cycle_random_overlay(),
+            None => return,
+        }
+        self.cycle_random_overlay = Some(overlay);
+    }
+
+    /// カーソル行の項目、または plugin の出現率を切り替える。
+    fn toggle_cycle_random_row(&mut self, overlay: &CycleRandomOverlay) {
+        match overlay.row(overlay.cursor()) {
+            Some(CycleRandomRow::Item(item)) => self.toggle_cycle_random(item),
+            Some(CycleRandomRow::Plugin(plugin)) => self.toggle_plugin_weight(plugin),
+            None => {}
         }
     }
 

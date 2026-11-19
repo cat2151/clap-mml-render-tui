@@ -171,7 +171,7 @@ mod tests {
         let b = cmrt_history::daw_cache_mml_hash("cde");
         assert_eq!(a, b);
 
-        let c = cmrt_history::daw_cache_mml_hash(r#"{"Surge XT patch": "x"}cde"#);
+        let c = cmrt_history::daw_cache_mml_hash(r#"{"patch": "x:"}cde"#);
         assert_ne!(a, c);
     }
 

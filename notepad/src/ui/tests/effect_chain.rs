@@ -2,8 +2,8 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::*;
 
-const PAD_LINE: &str = r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#;
-const PAD_WITH_HALL_LINE: &str = r#"{"Surge XT patch":"Pads/Pad 1.fxp","effects after instrument":[{"Dragonfly Hall Reverb preset":"Medium Clear Hall"}]} l8cdef"#;
+const PAD_LINE: &str = r#"{"patch":"Pads/Pad 1.fxp:"} l8cdef"#;
+const PAD_WITH_HALL_LINE: &str = r#"{"patch":"Pads/Pad 1.fxp:","effects after instrument":[{"Dragonfly Hall Reverb preset":"Medium Clear Hall"}]} l8cdef"#;
 const WIDTH: u16 = 240;
 const HEIGHT: u16 = 48;
 

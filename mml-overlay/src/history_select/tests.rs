@@ -1,6 +1,6 @@
 use super::*;
 
-const PAD_JSON: &str = r#"{"Surge XT patch": "Pads/Pad 1.fxp"}"#;
+const PAD_JSON: &str = r#"{"patch": "Pads/Pad 1.fxp:"}"#;
 
 fn press(code: KeyCode) -> KeyEvent {
     KeyEvent::new(code, KeyModifiers::NONE)

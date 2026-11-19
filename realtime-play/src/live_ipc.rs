@@ -104,6 +104,7 @@ impl RealtimePlayServerSupervisor {
     ///
     /// 起動時の全 instance prepare・行音色変更・MML overlay・keyboard がこれを使う。
     /// 非演奏 bank への先読みには [`Self::prepare_standby_patch`] を使うこと。
+    /// この crate の音色引数はすべて wire（`<パス><拡張子>:<タグ>`）。表示名は呼び出し側が変換する。
     pub fn prepare_live_patch(&self, instance_id: InstanceId, patch: Option<&str>) -> Result<()> {
         self.prepare_patch_logged("shm-patch-prepare", instance_id, patch, "")
     }

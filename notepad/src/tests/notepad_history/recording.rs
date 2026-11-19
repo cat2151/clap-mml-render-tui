@@ -22,18 +22,18 @@ fn handle_patch_select_enter_records_notepad_history() {
 
     assert_eq!(
         app.editor.lines,
-        vec![r#"{"Surge XT patch": "Pads/Pad 1.fxp"} cde"#.to_string()]
+        vec![r#"{"patch": "Pads/Pad 1.fxp:"} cde"#.to_string()]
     );
     assert_eq!(
         app.patch_phrase_store.notepad.history,
-        vec![r#"{"Surge XT patch": "Pads/Pad 1.fxp"} cde"#.to_string()]
+        vec![r#"{"patch": "Pads/Pad 1.fxp:"} cde"#.to_string()]
     );
 }
 
 #[test]
 fn handle_patch_phrase_enter_records_notepad_history() {
     let mut app = NotepadScreen::new_for_test(test_config());
-    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} old"#.to_string()];
+    app.editor.lines = vec![r#"{"patch":"Pads/Pad 1.fxp:"} old"#.to_string()];
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         cmrt_history::PatchPhraseState {
@@ -47,6 +47,6 @@ fn handle_patch_phrase_enter_records_notepad_history() {
 
     assert_eq!(
         app.patch_phrase_store.notepad.history,
-        vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()]
+        vec![r#"{"patch":"Pads/Pad 1.fxp:"} l8cdef"#.to_string()]
     );
 }

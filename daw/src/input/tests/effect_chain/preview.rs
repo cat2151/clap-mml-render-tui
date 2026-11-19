@@ -1,6 +1,6 @@
 use super::*;
 
-const INIT_WITH_HALL: &str = r#"{"Surge XT patch":"Pads/Pad 1.fxp","effects after instrument":[{"Test FX preset":"Reverb 1/Hall"}]}"#;
+const INIT_WITH_HALL: &str = r#"{"patch":"Pads/Pad 1.fxp:","effects after instrument":[{"Test FX preset":"Reverb 1/Hall"}]}"#;
 
 #[test]
 fn space_previews_the_bypass_reflecting_chain_on_the_overlay_track_only() {
@@ -102,7 +102,7 @@ fn space_does_nothing_while_playing() {
 fn space_previews_the_chord_generated_phrase_when_the_cell_is_empty() {
     let (mut app, _cache_rx) = app_with_catalog();
     app.editor.data[crate::CHORD_TRACK][1] = "IIm7".to_string();
-    app.editor.data[2][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp","generate from chord track":"close","effects after instrument":[{"Test FX preset":"Reverb 1/Hall"}]}"#.to_string();
+    app.editor.data[2][0] = r#"{"patch":"Pads/Pad 1.fxp:","generate from chord track":"close","effects after instrument":[{"Test FX preset":"Reverb 1/Hall"}]}"#.to_string();
     app.editor.data[2][1] = String::new();
 
     press(&mut app, &[KeyCode::Char('x')]);
@@ -226,7 +226,7 @@ fn add_overlay_previews_after_a_kind_change_rebuilds_the_list() {
 fn chain_list_previews_after_bypass_delete_and_reorder() {
     let (mut app, _cache_rx) = app_with_catalog();
     let sink = attach_live(&mut app, RecordingSink::default());
-    app.editor.data[2][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp","effects after instrument":[{"Test FX preset":"Reverb 1/Hall"},{"Test FX preset":"Delay/Echo"}]}"#.to_string();
+    app.editor.data[2][0] = r#"{"patch":"Pads/Pad 1.fxp:","effects after instrument":[{"Test FX preset":"Reverb 1/Hall"},{"Test FX preset":"Delay/Echo"}]}"#.to_string();
     press(&mut app, &[KeyCode::Char('x')]);
 
     press(&mut app, &[KeyCode::Char('b')]);

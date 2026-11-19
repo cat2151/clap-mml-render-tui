@@ -5,7 +5,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 const PATCH_SELECT_OVERLAY_WIDTH_PERCENT: u16 = 88;
 const PATCH_SELECT_OVERLAY_HEIGHT_PERCENT: u16 = 76;
 
-const PAD_LINE: &str = r#"{"Surge XT patch":"Pads/Pad 1.fxp"} abc"#;
+const PAD_LINE: &str = r#"{"patch":"Pads/Pad 1.fxp:"} abc"#;
 
 fn open_pads(app: &mut NotepadScreen<'_>) {
     open_patch_select_for_test(
@@ -75,7 +75,7 @@ fn patch_select_screen_marks_memory_cached_preview_items() {
     open_pads(&mut app);
     app.audio.cache.lock().unwrap().clear();
     app.audio.cache.lock().unwrap().insert(
-        r#"{"Surge XT patch": "Pads/Pad 2.fxp"} abc"#.to_string(),
+        r#"{"patch": "Pads/Pad 2.fxp:"} abc"#.to_string(),
         vec![0.1, 0.2],
     );
 
@@ -101,7 +101,7 @@ fn patch_select_screen_marks_silent_previews_in_dark_gray() {
         cache.clear();
         cache.insert(PAD_LINE.to_string(), vec![0.0, 0.1]);
         cache.insert(
-            r#"{"Surge XT patch": "Pads/Pad 2.fxp"} abc"#.to_string(),
+            r#"{"patch": "Pads/Pad 2.fxp:"} abc"#.to_string(),
             vec![0.0; 4],
         );
     }
@@ -200,13 +200,13 @@ fn patch_select_overlay_uses_yellow_outer_border() {
 fn patch_select_screen_splits_status_and_keybinds() {
     let mut app = NotepadScreen::new_for_test(test_config());
     app.test_set_render_job_status(
-        r#"{"Surge XT patch":"Brass/Brass 1.fxp"} c"#,
+        r#"{"patch":"Brass/Brass 1.fxp:"} c"#,
         Some(crate::TuiRenderJobStatus::Running {
             elapsed: std::time::Duration::ZERO,
         }),
     );
     app.test_set_render_job_status(
-        r#"{"Surge XT patch":"sfz/Guitar/04-Guitar.sfz"} c"#,
+        r#"{"patch":"sfz/Guitar/04-Guitar.sfz:"} c"#,
         Some(crate::TuiRenderJobStatus::Pending),
     );
     open_pads(&mut app);

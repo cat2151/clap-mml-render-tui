@@ -21,7 +21,7 @@ fn n_p_t_switch_to_corresponding_overlays() {
     let mut app = NotepadScreen::new_for_test(test_config());
     open_patch_select_for_test(
         &mut app,
-        r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#,
+        r#"{"patch":"Pads/Pad 1.fxp:"} l8cdef"#,
         &["Pads/Pad 1.fxp", "Leads/Lead 1.fxp"],
     );
     app.patch_phrase_store.notepad.history = vec!["line history".to_string()];

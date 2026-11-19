@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use cmrt_mml_overlay::{LivePatch, MmlOverlaySender, RecordingSink, SinkOperation};
 
-const INIT_WITH_PATCH: &str = r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#;
+const INIT_WITH_PATCH: &str = r#"{"patch":"Pads/Pad 1.fxp:"}"#;
 
 /// マシンに依存しない、手で並べた catalog（plugin 2 つ、category/kind 付き）。
 ///
@@ -167,7 +167,7 @@ fn x_a_j_enter_enter_writes_a_one_element_chain_and_keeps_the_patch() {
     assert_eq!(
         init_json(&app),
         json!({
-            "Surge XT patch": "Pads/Pad 1.fxp",
+            "patch": "Pads/Pad 1.fxp:",
             "effects after instrument": [{"Test FX preset": "Reverb 2/Room"}],
         })
     );
@@ -184,7 +184,7 @@ fn x_a_j_enter_enter_writes_a_one_element_chain_and_keeps_the_patch() {
 fn dd_deletes_the_stage_under_the_cursor_and_an_empty_chain_drops_the_key() {
     let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("daw_cache");
     let (mut app, _cache_rx) = app_with_catalog();
-    app.editor.data[2][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp","effects after instrument":[{"Test FX preset":"Reverb 1/Hall"},{"Test FX preset":"Reverb 2/Room"}]}"#.to_string();
+    app.editor.data[2][0] = r#"{"patch":"Pads/Pad 1.fxp:","effects after instrument":[{"Test FX preset":"Reverb 1/Hall"},{"Test FX preset":"Reverb 2/Room"}]}"#.to_string();
 
     press(
         &mut app,
@@ -198,7 +198,7 @@ fn dd_deletes_the_stage_under_the_cursor_and_an_empty_chain_drops_the_key() {
     assert_eq!(
         init_json(&app),
         json!({
-            "Surge XT patch": "Pads/Pad 1.fxp",
+            "patch": "Pads/Pad 1.fxp:",
             "effects after instrument": [{"Test FX preset": "Reverb 2/Room"}],
         })
     );
@@ -219,7 +219,7 @@ fn dd_deletes_the_stage_under_the_cursor_and_an_empty_chain_drops_the_key() {
 fn a_single_d_followed_by_another_key_does_not_delete() {
     let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("daw_cache");
     let (mut app, _cache_rx) = app_with_catalog();
-    app.editor.data[2][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp","effects after instrument":[{"Test FX preset":"Reverb 1/Hall"}]}"#.to_string();
+    app.editor.data[2][0] = r#"{"effects after instrument":[{"Test FX preset":"Reverb 1/Hall"}],"patch":"Pads/Pad 1.fxp:"}"#.to_string();
     let before = app.editor.data[2][0].clone();
 
     press(
@@ -329,7 +329,7 @@ fn a_with_an_empty_catalog_stays_in_the_chain_overlay() {
 #[test]
 fn the_overlay_shows_the_instrument_and_the_existing_chain_in_order() {
     let (mut app, _cache_rx) = app_with_catalog();
-    app.editor.data[2][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp","effects after instrument":[{"Test FX preset":"Reverb 2/Room"},{"Unknown preset":"x"}]}"#.to_string();
+    app.editor.data[2][0] = r#"{"patch":"Pads/Pad 1.fxp:","effects after instrument":[{"Test FX preset":"Reverb 2/Room"},{"Unknown preset":"x"}]}"#.to_string();
 
     app.handle_normal(KeyCode::Char('x'));
 

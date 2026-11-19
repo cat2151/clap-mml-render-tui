@@ -132,7 +132,7 @@ class RenderServer:
             )
 
     def render(self, patch: str, mml: str) -> bytes:
-        body = json.dumps({"Surge XT patch": patch, "beat": "4/4"}) + mml
+        body = json.dumps({"patch": patch + ":", "beat": "4/4"}) + mml
         request = urllib.request.Request(
             f"http://127.0.0.1:{self.port}/render",
             data=body.encode("utf-8"),

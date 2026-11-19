@@ -5,7 +5,7 @@ fn handle_normal_shift_h_opens_patch_history_overlay_for_track_patch() {
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_track = 2;
     app.editor.cursor_measure = 2;
-    app.editor.data[2][0] = r#"{"Surge XT patch": "Pads/Pad 1.fxp"}"#.to_string();
+    app.editor.data[2][0] = r#"{"patch": "Pads/Pad 1.fxp:"}"#.to_string();
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         cmrt_history::PatchPhraseState {
@@ -49,7 +49,7 @@ fn handle_normal_shift_h_migrates_legacy_patch_name_to_factory_prefixed_patch_na
     });
     app.editor.cursor_track = 2;
     app.editor.cursor_measure = 2;
-    app.editor.data[2][0] = r#"{"Surge XT patch": "Pads/Pad 1.fxp"}"#.to_string();
+    app.editor.data[2][0] = r#"{"patch": "Pads/Pad 1.fxp:"}"#.to_string();
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         cmrt_history::PatchPhraseState {
@@ -94,7 +94,7 @@ fn handle_normal_shift_h_without_track_patch_opens_filtered_history_overlay() {
     app.editor.cursor_measure = 1;
     app.patch_phrase_store.notepad.history = vec![
         "plain phrase".to_string(),
-        r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string(),
+        r#"{"patch":"Pads/Pad 1.fxp:"} l8cdef"#.to_string(),
     ];
 
     app.handle_normal(KeyCode::Char('H'));
@@ -103,6 +103,6 @@ fn handle_normal_shift_h_without_track_patch_opens_filtered_history_overlay() {
     assert_eq!(app.overlays.history.patch_name, None);
     assert_eq!(
         app.history_overlay_history_items(),
-        vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()]
+        vec![r#"{"patch":"Pads/Pad 1.fxp:"} l8cdef"#.to_string()]
     );
 }

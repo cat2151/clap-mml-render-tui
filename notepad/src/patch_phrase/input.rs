@@ -74,12 +74,7 @@ impl<'a> NotepadScreen<'a> {
             .embedded_json
             .as_deref()
             .and_then(|json| serde_json::from_str::<Value>(json).ok())
-            .and_then(|value| {
-                value
-                    .get(PATCH_JSON_KEY)
-                    .and_then(Value::as_str)
-                    .map(str::to_string)
-            })?;
+            .and_then(|value| cmrt_core::patch_display_from_embedded_json(&value))?;
         let phrase = preprocessed.remaining_mml.trim().to_string();
         Some((patch_name, phrase))
     }
@@ -190,7 +185,8 @@ impl<'a> NotepadScreen<'a> {
             PatchPhrasePane::History => self.patch_phrase_history_items().get(cursor).cloned(),
             PatchPhrasePane::Favorites => self.patch_phrase_favorite_items().get(cursor).cloned(),
         }?;
-        let json = serde_json::json!({ PATCH_JSON_KEY: patch_name }).to_string();
+        let json = serde_json::json!({ PATCH_JSON_KEY: cmrt_core::wire_from_display(patch_name) })
+            .to_string();
         Some(format!("{json} {phrase}"))
     }
 

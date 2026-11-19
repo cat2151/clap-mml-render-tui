@@ -23,7 +23,7 @@ fn pressing_g_picks_from_the_injected_catalog() {
     let (mut app, _cache_rx) = build_wide_test_app();
     cursor_at_wizard_target(&mut app);
     // 音色が既にあると、この経路では音色の抽選（= 実 file の走査）が走らない。
-    app.editor.data[TRACK][0] = r#"{"Surge XT patch": "Chosen.fxp"}"#.to_string();
+    app.editor.data[TRACK][0] = r#"{"patch": "Chosen.fxp:"}"#.to_string();
     set_catalog(&mut app, &["I-V-vi-IV"]);
 
     press_g(&mut app);
@@ -31,7 +31,7 @@ fn pressing_g_picks_from_the_injected_catalog() {
     assert_eq!(chord_row(&app), ["I", "V", "VIm", "IV", "", "", "", ""]);
     assert_eq!(
         app.editor.data[TRACK][0],
-        r#"{"Surge XT patch":"Chosen.fxp","generate from chord track":"close"}"#
+        r#"{"generate from chord track":"close","patch":"Chosen.fxp:"}"#
     );
 }
 

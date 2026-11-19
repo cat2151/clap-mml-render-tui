@@ -5,7 +5,7 @@ fn handle_history_overlay_arrow_and_space_preview_selected_mml() {
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_track = 2;
     app.editor.cursor_measure = 1;
-    app.editor.data[2][0] = r#"{"Surge XT patch": "Pads/Pad 1.fxp"}"#.to_string();
+    app.editor.data[2][0] = r#"{"patch": "Pads/Pad 1.fxp:"}"#.to_string();
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         cmrt_history::PatchPhraseState {
@@ -27,7 +27,7 @@ fn handle_history_overlay_arrow_and_space_preview_selected_mml() {
     ));
     assert_eq!(
         app.playback.measure_track_mmls.lock().unwrap()[0][2],
-        r#"{"Surge XT patch":"Pads/Pad 1.fxp"}favorite"#
+        r#"{"patch":"Pads/Pad 1.fxp:"}favorite"#
     );
 
     app.handle_history_overlay(KeyCode::Char(' '));
@@ -38,7 +38,7 @@ fn handle_history_overlay_arrow_and_space_preview_selected_mml() {
     ));
     assert_eq!(
         app.playback.measure_track_mmls.lock().unwrap()[0][2],
-        r#"{"Surge XT patch":"Pads/Pad 1.fxp"}favorite"#
+        r#"{"patch":"Pads/Pad 1.fxp:"}favorite"#
     );
 
     app.handle_history_overlay(KeyCode::Left);
@@ -49,7 +49,7 @@ fn handle_history_overlay_arrow_and_space_preview_selected_mml() {
     ));
     assert_eq!(
         app.playback.measure_track_mmls.lock().unwrap()[0][2],
-        r#"{"Surge XT patch":"Pads/Pad 1.fxp"}history"#
+        r#"{"patch":"Pads/Pad 1.fxp:"}history"#
     );
 }
 
@@ -58,7 +58,7 @@ fn handle_history_overlay_down_previews_next_history_item() {
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_track = 2;
     app.editor.cursor_measure = 1;
-    app.editor.data[2][0] = r#"{"Surge XT patch": "Pads/Pad 1.fxp"}"#.to_string();
+    app.editor.data[2][0] = r#"{"patch": "Pads/Pad 1.fxp:"}"#.to_string();
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         cmrt_history::PatchPhraseState {
@@ -77,7 +77,7 @@ fn handle_history_overlay_down_previews_next_history_item() {
     ));
     assert_eq!(
         app.playback.measure_track_mmls.lock().unwrap()[0][2],
-        r#"{"Surge XT patch":"Pads/Pad 1.fxp"}second"#
+        r#"{"patch":"Pads/Pad 1.fxp:"}second"#
     );
 }
 
@@ -86,8 +86,7 @@ fn handle_history_overlay_j_k_preview_uses_overlay_patch_name() {
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_track = 2;
     app.editor.cursor_measure = 1;
-    app.editor.data[2][0] =
-        r#"{"Surge XT patch":"Pads/Pad 1.fxp","Surge XT patch filter":"pads"}"#.to_string();
+    app.editor.data[2][0] = r#"{"patch":"Pads/Pad 1.fxp:","patch filter":"pads"}"#.to_string();
     app.patch_phrase_store.patches.insert(
         "Bass/Bass 1.fxp".to_string(),
         cmrt_history::PatchPhraseState {
@@ -106,7 +105,7 @@ fn handle_history_overlay_j_k_preview_uses_overlay_patch_name() {
     ));
     assert_eq!(
         app.playback.measure_track_mmls.lock().unwrap()[0][2],
-        r#"{"Surge XT patch":"Bass/Bass 1.fxp","Surge XT patch filter":"pads"}bass second"#
+        r#"{"patch":"Bass/Bass 1.fxp:","patch filter":"pads"}bass second"#
     );
 
     app.handle_history_overlay(KeyCode::Char('k'));
@@ -114,7 +113,7 @@ fn handle_history_overlay_j_k_preview_uses_overlay_patch_name() {
     assert_eq!(app.overlays.history.history_cursor, 0);
     assert_eq!(
         app.playback.measure_track_mmls.lock().unwrap()[0][2],
-        r#"{"Surge XT patch":"Bass/Bass 1.fxp","Surge XT patch filter":"pads"}bass first"#
+        r#"{"patch":"Bass/Bass 1.fxp:","patch filter":"pads"}bass first"#
     );
 }
 
@@ -142,6 +141,6 @@ fn handle_history_overlay_j_k_preview_falls_back_when_track_init_json_is_not_obj
     ));
     assert_eq!(
         app.playback.measure_track_mmls.lock().unwrap()[0][2],
-        r#"{"Surge XT patch":"Bass/Bass 1.fxp"}bass second"#
+        r#"{"patch":"Bass/Bass 1.fxp:"}bass second"#
     );
 }

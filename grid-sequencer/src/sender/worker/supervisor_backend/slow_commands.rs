@@ -188,7 +188,7 @@ impl SupervisorBackend {
         let started = Instant::now();
         let result = self.supervisor.prepare_live_patch_with_effect_chain(
             instance_id,
-            patch.patch.as_deref(),
+            patch.wire().as_deref(),
             &patch.effect_chain,
         );
         let _ = self
@@ -312,7 +312,7 @@ fn prepare_instances(
         if let Err(error) = supervisor
             .prepare_live_patch_with_effect_chain(
                 *instance_id,
-                patch.patch.as_deref(),
+                patch.wire().as_deref(),
                 &patch.effect_chain,
             )
             .with_context(|| {

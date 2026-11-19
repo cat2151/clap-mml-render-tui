@@ -76,6 +76,7 @@ impl PatchPlugins {
     }
 
     /// この patch 文字列を鳴らすプラグインの、[`PatchPlugins::plugins`] 上の添字。
+    /// `patch` は表示名（空タグの `:` を落とした形。`docs/adr/0031-tui-holds-display-names-and-writes-wire.md`）。
     ///
     /// patch 一覧の絞り込みは patch ごとにこれを引くので、プラグインごとの材料は
     /// 呼び出し側が**添字で引ける形に組んでから**ループへ入ること。

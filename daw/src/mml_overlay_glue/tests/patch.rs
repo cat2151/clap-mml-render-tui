@@ -13,7 +13,7 @@ use super::super::super::{DawApp, DawMode};
 use super::{ctrl, key, plain};
 use crate::input::tests::build_test_app;
 
-const PAD_INIT_CELL: &str = r#"{"Surge XT patch": "Pads/Snapshot Pad.fxp"}"#;
+const PAD_INIT_CELL: &str = r#"{"patch": "Pads/Snapshot Pad.fxp:"}"#;
 /// builtin の分類にどれも当たらない音色。ユーザープリセットの効果だけを見るため。
 const UNCLASSIFIED_PATCH: &str = "Misc/Zzq Item.fxp";
 
@@ -68,7 +68,7 @@ fn confirming_a_patch_writes_it_into_the_init_cell() {
     assert_eq!(app.mml_overlay.patch(), Some("Pads/Snapshot Keys Pad.fxp"));
     assert_eq!(
         app.editor.data[2][0],
-        r#"{"Surge XT patch": "Pads/Snapshot Keys Pad.fxp"}"#
+        r#"{"patch": "Pads/Snapshot Keys Pad.fxp:"}"#
     );
 }
 
@@ -101,14 +101,13 @@ fn confirming_a_patch_keeps_the_patch_filter_query() {
     let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = opened_with_the_pad_patch();
     app.editor.data[2][0] =
-        r#"{"Surge XT patch": "Pads/Snapshot Pad.fxp", "Surge XT patch filter": "snapshot"}"#
-            .to_string();
+        r#"{"patch": "Pads/Snapshot Pad.fxp:", "patch filter": "snapshot"}"#.to_string();
 
     confirm_patch_by_query(&mut app, "snapshot keys");
 
     assert_eq!(
         app.editor.data[2][0],
-        r#"{"Surge XT patch": "Pads/Snapshot Keys Pad.fxp", "Surge XT patch filter": "snapshot"}"#,
+        r#"{"patch": "Pads/Snapshot Keys Pad.fxp:", "patch filter": "snapshot"}"#,
         "音色名だけを差し替え、付随メタデータは壊さないこと"
     );
 }
@@ -143,7 +142,7 @@ fn the_confirmed_patch_survives_closing_the_overlay() {
     assert_eq!(app.mode, DawMode::Normal);
     assert_eq!(
         app.editor.data[2][0],
-        r#"{"Surge XT patch": "Pads/Snapshot Keys Pad.fxp"}"#
+        r#"{"patch": "Pads/Snapshot Keys Pad.fxp:"}"#
     );
 }
 
@@ -218,7 +217,7 @@ fn ctrl_t_on_a_kick_track_opens_the_kick_preset() {
     *app.patch_load.lock().unwrap() = PatchLoadState::ready(pairs);
     app.editor.cursor_track = 2;
     app.editor.cursor_measure = 1;
-    app.editor.data[2][0] = r#"{"Surge XT patch": "Drums/Kick A.fxp"}"#.to_string();
+    app.editor.data[2][0] = r#"{"patch": "Drums/Kick A.fxp:"}"#.to_string();
     assert!(app.try_open_mml_overlay(ctrl('p')));
 
     // 一覧の末尾を確定する。kick の Preset で開いていれば snare は候補に無い。

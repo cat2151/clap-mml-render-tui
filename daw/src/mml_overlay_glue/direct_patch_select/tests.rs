@@ -14,8 +14,8 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use super::super::super::{DawApp, DawMode};
 use crate::input::tests::build_test_app;
 
-const PAD_INIT_CELL: &str = r#"{"Surge XT patch": "Pads/Snapshot Pad.fxp"}"#;
-const KEYS_INIT_CELL: &str = r#"{"Surge XT patch": "Pads/Snapshot Keys Pad.fxp"}"#;
+const PAD_INIT_CELL: &str = r#"{"patch": "Pads/Snapshot Pad.fxp:"}"#;
+const KEYS_INIT_CELL: &str = r#"{"patch": "Pads/Snapshot Keys Pad.fxp:"}"#;
 
 pub(in crate::mml_overlay_glue) fn plain(code: char) -> KeyEvent {
     KeyEvent::new(KeyCode::Char(code), KeyModifiers::NONE)
@@ -226,7 +226,7 @@ fn an_empty_cell_generated_from_the_chord_row_previews_the_generated_notes() {
     let (mut app, _cache_rx) = app_with_pad_track();
     app.editor.data[1][1] = "Cm7".to_string();
     app.editor.data[2][0] =
-        r#"{"Surge XT patch": "Pads/Snapshot Pad.fxp", "generate from chord track": "close"}o3"#
+        r#"{"patch": "Pads/Snapshot Pad.fxp:", "generate from chord track": "close"}o3"#
             .to_string();
     app.editor.data[2][1].clear();
 
@@ -249,8 +249,7 @@ pub(in crate::mml_overlay_glue) fn app_with_generated_empty_cell(
     let (mut app, cache_rx) = app_with_pad_track();
     app.editor.data[1][1] = "I".to_string();
     app.editor.data[2][0] =
-        r#"{"Surge XT patch":"Pads/Snapshot Pad.fxp","generate from chord track":"close"}"#
-            .to_string();
+        r#"{"patch":"Pads/Snapshot Pad.fxp:","generate from chord track":"close"}"#.to_string();
     app.editor.data[2][1].clear();
     (app, cache_rx)
 }
@@ -310,7 +309,7 @@ fn opening_plays_the_line_with_the_current_patch() {
 fn the_preview_goes_through_the_track_effect_chain() {
     let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = app_with_pad_track();
-    app.editor.data[2][0] = r#"{"Surge XT patch": "Pads/Snapshot Pad.fxp", "effects after instrument": [{"Surge XT Effects preset": "Reverb 1/Cathedral 2.srgfx"}]}"#.to_string();
+    app.editor.data[2][0] = r#"{"patch": "Pads/Snapshot Pad.fxp:", "effects after instrument": [{"Surge XT Effects preset": "Reverb 1/Cathedral 2.srgfx"}]}"#.to_string();
     let sink = attach_recording_sink(&mut app);
 
     app.handle_normal_key_event(plain('t'));
@@ -364,7 +363,7 @@ fn confirm_edge_candidate(app: &mut DawApp, edge: KeyCode) {
 #[test]
 fn a_kick_track_opens_the_selector_on_the_kick_preset() {
     let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
-    let (mut app, _cache_rx) = app_with_drum_catalog(r#"{"Surge XT patch": "Drums/Kick A.fxp"}"#);
+    let (mut app, _cache_rx) = app_with_drum_catalog(r#"{"patch": "Drums/Kick A.fxp:"}"#);
 
     confirm_last_candidate(&mut app);
 

@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn handle_normal_shift_h_enters_patch_phrase_overlay() {
     let mut app = NotepadScreen::new_for_test(test_config());
-    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} old"#.to_string()];
+    app.editor.lines = vec![r#"{"patch":"Pads/Pad 1.fxp:"} old"#.to_string()];
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         cmrt_history::PatchPhraseState {

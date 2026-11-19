@@ -5,7 +5,7 @@ const BASS: &str = "patches_factory/Basses/Wobble Bass.fxp";
 const LEAD: &str = "patches_factory/Leads/Screaming Lead.fxp";
 
 fn patch_cell(display: &str) -> String {
-    format!(r#"{{"Surge XT patch": "{display}"}}"#)
+    format!(r#"{{"patch": "{display}:"}}"#)
 }
 
 /// 音色の用途まで引ける catalog を app へ載せる。
@@ -158,7 +158,7 @@ fn a_generated_track_is_marked_in_the_role_row() {
     let mut app = mixer_app();
     load_catalog(&app, &[BASS]);
     app.editor.data[2][0] =
-        format!(r#"{{"Surge XT patch": "{BASS}", "generate from chord track": "close"}}"#);
+        format!(r#"{{"patch": "{BASS}:", "generate from chord track": "close"}}"#);
 
     let buffer = render_buffer(&app, 100, 30);
 

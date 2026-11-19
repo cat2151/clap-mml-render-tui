@@ -1,6 +1,6 @@
 # ADR 0003: MML 先頭 JSON のキーは `"Surge XT patch"` を流用する
 
-- 状態: 採用
+- 状態: 置き換え済み（[0031](0031-tui-holds-display-names-and-writes-wire.md)）
 - 関連: [0001](0001-patch-string-decides-the-plugin.md) / [0004](0004-default-plugin-owns-unspecified-patches.md)
 
 ## 決定

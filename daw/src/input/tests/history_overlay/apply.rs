@@ -6,7 +6,7 @@ fn handle_history_overlay_enter_overwrites_measure_and_backs_up_old_phrase() {
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_track = 2;
     app.editor.cursor_measure = 2;
-    app.editor.data[2][0] = r#"{"Surge XT patch": "Pads/Pad 1.fxp"}"#.to_string();
+    app.editor.data[2][0] = r#"{"patch": "Pads/Pad 1.fxp:"}"#.to_string();
     app.editor.data[2][2] = "before".to_string();
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
@@ -40,22 +40,19 @@ fn handle_history_overlay_enter_without_track_patch_sets_patch_and_backs_up_old_
     app.editor.cursor_measure = 2;
     app.editor.data[2][2] = "before".to_string();
     app.patch_phrase_store.notepad.history =
-        vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
+        vec![r#"{"patch":"Pads/Pad 1.fxp:"} l8cdef"#.to_string()];
     app.start_history_overlay();
 
     app.handle_history_overlay(KeyCode::Enter);
 
     assert!(matches!(app.mode, DawMode::Normal));
-    assert_eq!(
-        app.editor.data[2][0],
-        r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#
-    );
+    assert_eq!(app.editor.data[2][0], r#"{"patch":"Pads/Pad 1.fxp:"}"#);
     assert_eq!(app.editor.data[2][2], "l8cdef");
     assert_eq!(
         app.patch_phrase_store.notepad.history,
         vec![
-            r#"{"Surge XT patch":"Pads/Pad 1.fxp"} before"#.to_string(),
-            r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()
+            r#"{"patch":"Pads/Pad 1.fxp:"} before"#.to_string(),
+            r#"{"patch":"Pads/Pad 1.fxp:"} l8cdef"#.to_string()
         ]
     );
     assert!(app.patch_phrase_store_dirty);
@@ -67,7 +64,7 @@ fn handle_history_overlay_enter_from_favorites_uses_selected_favorite() {
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_track = 2;
     app.editor.cursor_measure = 1;
-    app.editor.data[2][0] = r#"{"Surge XT patch": "Pads/Pad 1.fxp"}"#.to_string();
+    app.editor.data[2][0] = r#"{"patch": "Pads/Pad 1.fxp:"}"#.to_string();
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         cmrt_history::PatchPhraseState {

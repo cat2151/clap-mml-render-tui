@@ -7,10 +7,9 @@ use serde_json::{json, Value};
 use crate::tests::{test_config, test_effect_plugins};
 use crate::{Mode, NotepadScreen, PlayState, PATCH_JSON_KEY};
 
-const PAD_LINE: &str =
-    r#"{"Surge XT patch":"Pads/Pad 1.fxp","Surge XT patch filter":"pads"} l8cdef"#;
+const PAD_LINE: &str = r#"{"patch":"Pads/Pad 1.fxp:","patch filter":"pads"} l8cdef"#;
 const TWO_PART_LINE: &str =
-    r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef;{"Surge XT patch":"Pads/Pad 1.fxp"} o3c1"#;
+    r#"{"patch":"Pads/Pad 1.fxp:"} l8cdef;{"patch":"Pads/Pad 1.fxp:"} o3c1"#;
 
 fn screen_on(line: &str) -> NotepadScreen<'static> {
     let mut app = NotepadScreen::new_for_test(test_config());
@@ -80,8 +79,8 @@ fn add_and_commit_writes_the_chain_and_keeps_patch_filter_and_phrase() {
 
     let [(json, phrase)] = parts(&app.editor.lines[0]).try_into().unwrap();
     assert_eq!(json[EFFECT_CHAIN_JSON_KEY], Value::Array(expected_chain));
-    assert_eq!(json[PATCH_JSON_KEY], "Pads/Pad 1.fxp");
-    assert_eq!(json["Surge XT patch filter"], "pads");
+    assert_eq!(json[PATCH_JSON_KEY], "Pads/Pad 1.fxp:");
+    assert_eq!(json["patch filter"], "pads");
     assert_eq!(phrase, "l8cdef");
     assert_eq!(playing(&app), Some(app.editor.lines[0].clone()));
 }
@@ -126,7 +125,7 @@ fn esc_discards_the_edit() {
 fn commit_keeps_the_auto_reverb_mark() {
     let hall = json!({"Dragonfly Hall Reverb preset": "Medium Clear Hall"});
     let line = format!(
-        r#"{{"Surge XT patch":"Pads/Pad 1.fxp","{EFFECT_CHAIN_JSON_KEY}":[{hall}],"{AUTO_REVERB_JSON_KEY}":{hall}}} l8cdef"#
+        r#"{{"patch":"Pads/Pad 1.fxp:","{EFFECT_CHAIN_JSON_KEY}":[{hall}],"{AUTO_REVERB_JSON_KEY}":{hall}}} l8cdef"#
     );
     let mut app = screen_on(&line);
     let expected_chain = open_add_and_candidate(&mut app);
@@ -141,9 +140,8 @@ fn commit_keeps_the_auto_reverb_mark() {
 #[test]
 fn deleting_every_stage_removes_the_chain_key() {
     let hall = json!({"Dragonfly Hall Reverb preset": "Medium Clear Hall"});
-    let line = format!(
-        r#"{{"Surge XT patch":"Pads/Pad 1.fxp","{EFFECT_CHAIN_JSON_KEY}":[{hall}]}} l8cdef"#
-    );
+    let line =
+        format!(r#"{{"patch":"Pads/Pad 1.fxp:","{EFFECT_CHAIN_JSON_KEY}":[{hall}]}} l8cdef"#);
     let mut app = screen_on(&line);
     press(&mut app, KeyCode::Char('x'));
     assert_eq!(app.effect_chain.chain, vec![hall]);
@@ -154,7 +152,7 @@ fn deleting_every_stage_removes_the_chain_key() {
 
     let [(json, phrase)] = parts(&app.editor.lines[0]).try_into().unwrap();
     assert!(json.get(EFFECT_CHAIN_JSON_KEY).is_none(), "{json}");
-    assert_eq!(json[PATCH_JSON_KEY], "Pads/Pad 1.fxp");
+    assert_eq!(json[PATCH_JSON_KEY], "Pads/Pad 1.fxp:");
     assert_eq!(phrase, "l8cdef");
 }
 

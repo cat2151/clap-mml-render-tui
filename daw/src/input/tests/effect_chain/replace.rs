@@ -1,6 +1,6 @@
 use super::*;
 
-const INIT_WITH_ROOM_AND_CLEAN: &str = r#"{"Surge XT patch":"Pads/Pad 1.fxp","effects after instrument":[{"Test FX preset":"Reverb 2/Room"},{"Test Amp preset":"Clean"}]}"#;
+const INIT_WITH_ROOM_AND_CLEAN: &str = r#"{"patch":"Pads/Pad 1.fxp:","effects after instrument":[{"Test FX preset":"Reverb 2/Room"},{"Test Amp preset":"Clean"}]}"#;
 
 #[test]
 fn r_enter_replaces_the_cursor_stage_and_keeps_the_other_stages() {

@@ -1,6 +1,6 @@
 //! notepad の行のシンタックスハイライト。
 //!
-//! 行は `{"Surge XT patch": "Pads/Pad 1.fxp", ...} cde` の形。行頭 JSON のうち
+//! 行は `{"patch": "Pads/Pad 1.fxp:", ...} cde` の形。行頭 JSON のうち
 //! 音色名（stem とそれ以外）と effect の preset 名、MML 本体の音符の音名に色を付ける。
 //! MML 本体のどこが音符かはライブラリの parser に聞く。
 

@@ -18,9 +18,9 @@ fn x_opens_and_commits_the_mixer_selected_tracks_chain() {
     app.effect_plugins =
         cmrt_offline_render::EffectPlugins::with_catalog(cmrt_core::AudioEffectCatalog::default());
     app.editor.cursor_track = 2;
-    app.editor.data[2][0] = r#"{"Surge XT patch":"Grid.fxp"}"#.to_string();
+    app.editor.data[2][0] = r#"{"patch":"Grid.fxp:"}"#.to_string();
     app.editor.data[3][0] =
-        r#"{"Surge XT patch":"Mixer.fxp","effects after instrument":[{"Test FX preset":"Echo"}]}"#
+        r#"{"patch":"Mixer.fxp:","effects after instrument":[{"Test FX preset":"Echo"}]}"#
             .to_string();
     let grid_init = app.editor.data[2][0].clone();
 
@@ -41,7 +41,7 @@ fn x_opens_and_commits_the_mixer_selected_tracks_chain() {
     app.handle_effect_chain(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
     assert_eq!(app.mode, DawMode::Normal);
-    assert_eq!(app.editor.data[3][0], r#"{"Surge XT patch":"Mixer.fxp"}"#);
+    assert_eq!(app.editor.data[3][0], r#"{"patch":"Mixer.fxp:"}"#);
     assert_eq!(app.editor.data[2][0], grid_init);
 }
 

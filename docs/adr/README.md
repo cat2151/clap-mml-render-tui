@@ -11,6 +11,7 @@
 0028 は patch selector の一覧をどの Role でも Preset 欄の順に並べること。
 0029 は `cmrt.exe` と2つのサーバーの exe を静的リンクの zip にし、CI で毎日公開すること。
 0030 は patch selector の Preset 欄を画面では `Type` と呼び、保存形式とコードの名前は変えないこと。
+0031 は音色を表示名で持ち、MML と live IPC へ出す境界で `<パス><拡張子>:<タグ>` にすること。
 現行の操作と設定は、各画面の `?` help、生成される `config.toml`、`cmrt --help` にある。
 
 ここに載っている実装はすべて完了済み。
@@ -21,9 +22,9 @@ play-server 側（プラグインの実測仕様・実行時の設計）は
 
 | # | 決定 |
 |---|---|
-| [0001](0001-patch-string-decides-the-plugin.md) | patch 文字列がプラグインを決める |
+| [0001](0001-patch-string-decides-the-plugin.md) | patch 文字列がプラグインを決める（[0031](0031-tui-holds-display-names-and-writes-wire.md) で置き換え） |
 | [0002](0002-config-plugin-profiles.md) | config はプラグインプロファイル方式 |
-| [0003](0003-mml-patch-key.md) | MML 先頭 JSON のキーは `"Surge XT patch"` を流用する |
+| [0003](0003-mml-patch-key.md) | MML 先頭 JSON のキーは `"Surge XT patch"` を流用する（[0031](0031-tui-holds-display-names-and-writes-wire.md) で置き換え） |
 | [0004](0004-default-plugin-owns-unspecified-patches.md) | 音色を無指定にした行は既定プラグインで鳴る / cache 名前空間 |
 | [0005](0005-mixed-catalog-on-by-default.md) | 混在カタログは既定 ON。実在する dir だけ載せる |
 | [0006](0006-per-profile-relative-base.md) | display 文字列はプロファイルごとの base で相対化する |
@@ -51,3 +52,4 @@ play-server 側（プラグインの実測仕様・実行時の設計）は
 | [0028](0028-selector-list-follows-preset-order.md) | patch selector の一覧は、どの Role でも Preset 欄の順に並べる |
 | [0029](0029-daily-static-crt-release.md) | `cmrt.exe` と2つのサーバーの exe を静的リンクの zip にし、CI で毎日公開する |
 | [0030](0030-patch-selector-type-pane-label.md) | patch selector の Preset 欄は画面では `Type` と呼び、保存形式とコードは `preset` のまま |
+| [0031](0031-tui-holds-display-names-and-writes-wire.md) | 音色は表示名で持ち、MML 先頭 JSON（キー `"patch"`）と live IPC へ出す境界で wire（`<パス><拡張子>:<タグ>`）にする |

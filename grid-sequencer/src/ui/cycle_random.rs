@@ -5,6 +5,7 @@
 //!
 //! 描画と当たり判定が同じ矩形を見るよう、矩形は必ず [`overlay_rect`] から取ること。
 //! 項目の行は上から [`CycleRandomItem::ALL`] の順で、枠の内側の先頭から並ぶ。
+//! そのすぐ下へ、overlay を開いたときの catalog の plugin 行が続く。
 
 use ratatui::{
     layout::Rect,
@@ -19,7 +20,7 @@ use cmrt_tui_core::{
     theme::{MONOKAI_GRAY, MONOKAI_GREEN, MONOKAI_YELLOW},
 };
 
-use crate::{CycleRandom, CycleRandomItem, GridSequencerScreen};
+use crate::{CycleRandom, CycleRandomItem, GridSequencerScreen, PluginWeight, PluginWeights};
 
 const TITLE: &str = " 1周ごとの random ";
 
@@ -34,9 +35,17 @@ const FOOTER: [&str; 3] = [
 ];
 
 pub(super) fn draw_overlay(f: &mut Frame<'_>, screen: &GridSequencerScreen) {
-    let cursor = screen.cycle_random_cursor();
-    let lines = lines(screen.cycle_random(), cursor);
-    let area = overlay_rect(f.area());
+    let Some(overlay) = screen.cycle_random_overlay() else {
+        return;
+    };
+    let plugins = overlay.plugins();
+    let lines = lines(
+        screen.cycle_random(),
+        screen.plugin_weights(),
+        plugins,
+        Some(overlay.cursor()),
+    );
+    let area = overlay_rect(f.area(), plugins);
     f.render_widget(Clear, area);
     f.render_widget(
         Paragraph::new(lines).style(base_style()).block(
@@ -50,10 +59,16 @@ pub(super) fn draw_overlay(f: &mut Frame<'_>, screen: &GridSequencerScreen) {
     );
 }
 
-/// overlay の矩形。中身の幅・高さは設定値によらず一定なので、端末の矩形だけで決まる。
-pub(crate) fn overlay_rect(area: Rect) -> Rect {
+/// overlay の矩形。中身の幅・高さは設定値によらず一定なので、端末の矩形と plugin 名だけで決まる。
+pub(crate) fn overlay_rect(area: Rect, plugins: &[String]) -> Rect {
     // カーソルとチェックの有無で幅は変わらない。代表として全 ON・先頭カーソルで測る。
-    let lines = lines(CycleRandom::ALL, Some(0));
+    // 出現率の表記は `normal` のほうが長いので、全 plugin を `normal` で測る。
+    let lines = lines(
+        CycleRandom::ALL,
+        &PluginWeights::default(),
+        plugins,
+        Some(0),
+    );
     let content_width = lines.iter().map(Line::width).max().unwrap_or(0) as u16;
     let width = content_width
         .max(Line::from(TITLE).width() as u16)
@@ -67,8 +82,13 @@ pub(crate) fn overlay_rect(area: Rect) -> Rect {
 /// - `Some(Some(index))` … 項目の行
 /// - `Some(None)` … 枠の中だが項目ではない行
 /// - `None` … 枠の外
-pub(crate) fn hit_test(area: Rect, column: u16, row: u16) -> Option<Option<usize>> {
-    let overlay = overlay_rect(area);
+pub(crate) fn hit_test(
+    area: Rect,
+    plugins: &[String],
+    column: u16,
+    row: u16,
+) -> Option<Option<usize>> {
+    let overlay = overlay_rect(area, plugins);
     let inside = column >= overlay.x
         && column < overlay.x.saturating_add(overlay.width)
         && row >= overlay.y
@@ -78,10 +98,16 @@ pub(crate) fn hit_test(area: Rect, column: u16, row: u16) -> Option<Option<usize
     }
     // 枠線の1行ぶん内側から項目が並ぶ。
     let index = usize::from(row.saturating_sub(overlay.y + 1));
-    Some((row > overlay.y && index < CycleRandomItem::ALL.len()).then_some(index))
+    let rows = CycleRandomItem::ALL.len() + plugins.len();
+    Some((row > overlay.y && index < rows).then_some(index))
 }
 
-fn lines(random: CycleRandom, cursor: Option<usize>) -> Vec<Line<'static>> {
+fn lines(
+    random: CycleRandom,
+    weights: &PluginWeights,
+    plugins: &[String],
+    cursor: Option<usize>,
+) -> Vec<Line<'static>> {
     let mut lines = CycleRandomItem::ALL
         .iter()
         .enumerate()
@@ -100,6 +126,25 @@ fn lines(random: CycleRandom, cursor: Option<usize>) -> Vec<Line<'static>> {
             )
         })
         .collect::<Vec<_>>();
+    let name_width = plugins
+        .iter()
+        .map(|name| name.chars().count())
+        .max()
+        .unwrap_or(0);
+    lines.extend(plugins.iter().enumerate().map(|(offset, plugin)| {
+        let selected = cursor == Some(CycleRandomItem::ALL.len() + offset);
+        let marker = if selected { ">" } else { " " };
+        let weight = weights.weight(plugin);
+        let normal = weight == PluginWeight::Normal;
+        let check = if normal { "x" } else { " " };
+        Line::styled(
+            format!(
+                "{marker} [{check}]   {plugin:<name_width$} 音色の出現率 {}",
+                weight.label()
+            ),
+            entry_style(normal, selected),
+        )
+    }));
     lines.extend(
         FOOTER
             .iter()

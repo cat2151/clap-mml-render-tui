@@ -328,7 +328,7 @@ fn flush_notepad_disk_cache_persists_only_current_buffer_lines() {
     let _env_guard = cmrt_history::test_support::set_local_dir_envs(&tmp);
 
     let buffer_line = "buffer line actually in notepad";
-    let preview_only = r#"{"Surge XT patch": "some other patch.fxp"} l8cdef"#;
+    let preview_only = r#"{"patch": "some other patch.fxp:"} l8cdef"#;
 
     let mut app = NotepadScreen::new_for_test(test_config());
     app.editor.lines = vec![buffer_line.to_string()];

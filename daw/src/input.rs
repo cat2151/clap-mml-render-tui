@@ -22,8 +22,7 @@ use normal::{
     resolve_playback_start_measure_index, NormalPlaybackShortcut,
 };
 
-const PATCH_JSON_KEY: &str = "Surge XT patch";
-const PATCH_FILTER_QUERY_JSON_KEY: &str = "Surge XT patch filter";
+use cmrt_core::{wire_from_display, PATCH_FILTER_QUERY_JSON_KEY, PATCH_JSON_KEY};
 
 impl DawApp {
     fn resolve_patch_name(&self, patch_name: &str) -> Option<String> {
@@ -88,10 +87,7 @@ impl DawApp {
 
     pub(crate) fn extract_patch_phrase(mml: &str) -> Option<(String, String)> {
         let (value, phrase) = Self::extract_patch_json_and_phrase(mml)?;
-        let patch_name = value
-            .get(PATCH_JSON_KEY)
-            .and_then(Value::as_str)
-            .map(str::to_string)?;
+        let patch_name = cmrt_core::patch_display_from_embedded_json(&value)?;
         Some((patch_name, phrase))
     }
 
@@ -102,7 +98,7 @@ impl DawApp {
     /// `init_cell` の音色を差し替えた init セル。
     ///
     /// 音色以外のキー（chord 行からの生成、effect chain）と JSON の後ろの MML は残す。
-    /// init を丸ごと `{"Surge XT patch": ...}` に書き換えると、それらが音色変更で消える。
+    /// init を丸ごと `{"patch": ...}` に書き換えると、それらが音色変更で消える。
     ///
     /// `filter_query` が `None` なら filter キーは触らない（preview 用。打鍵ごとに MML が
     /// 変わると preview cache に当たらない）。`Some` なら書き換え、空なら消す
@@ -112,7 +108,10 @@ impl DawApp {
         patch_name: &str,
         filter_query: Option<&str>,
     ) -> String {
-        let mut entries = vec![(PATCH_JSON_KEY, Some(Value::String(patch_name.to_string())))];
+        let mut entries = vec![(
+            PATCH_JSON_KEY,
+            Some(Value::String(wire_from_display(patch_name))),
+        )];
         if let Some(filter_query) = filter_query {
             let filter_query = Some(filter_query.trim())
                 .filter(|query| !query.is_empty())
@@ -123,7 +122,7 @@ impl DawApp {
     }
 
     fn build_patch_json_with_filter_query(patch_name: &str, filter_query: Option<&str>) -> String {
-        let mut patch_json = serde_json::json!({ PATCH_JSON_KEY: patch_name });
+        let mut patch_json = serde_json::json!({ PATCH_JSON_KEY: wire_from_display(patch_name) });
         if let Some(filter_query) = filter_query
             .map(str::trim)
             .filter(|query| !query.is_empty())
@@ -137,7 +136,7 @@ impl DawApp {
         patch_name: &str,
         filter_query: Option<&str>,
     ) -> String {
-        let patch_name = Value::String(patch_name.to_string());
+        let patch_name = Value::String(wire_from_display(patch_name));
         match filter_query
             .map(str::trim)
             .filter(|query| !query.is_empty())
@@ -213,7 +212,7 @@ impl DawApp {
             let value_end = value_start + value_stream.byte_offset();
 
             if key == PATCH_JSON_KEY {
-                let new_patch_name = serde_json::to_string(patch_name).ok()?;
+                let new_patch_name = serde_json::to_string(&wire_from_display(patch_name)).ok()?;
                 return Some(format!(
                     "{}{}{}",
                     &raw_json[..value_start],
@@ -305,7 +304,7 @@ impl DawApp {
         {
             patch_json.insert(
                 PATCH_JSON_KEY.to_string(),
-                Value::String(patch_name.to_string()),
+                Value::String(wire_from_display(patch_name)),
             );
             return Value::Object(patch_json).to_string();
         }

@@ -120,7 +120,7 @@ fn daily_daw_is_fully_replaced_by_the_grid_song() {
     assert_eq!(app.editor.data[2][1], "o5c4r4o5g2");
     assert_eq!(app.editor.data[2][2], "o5d1");
     let init: Value = serde_json::from_str(&app.editor.data[2][0]).unwrap();
-    assert_eq!(init["Surge XT patch"], "Keys/Piano.fxp");
+    assert_eq!(init["patch"], "Keys/Piano.fxp:");
     assert_eq!(init["swing"], 61);
     assert_eq!(app.editor.cursor_track, FIRST_PLAYABLE_TRACK);
     assert_eq!(app.editor.cursor_measure, 1);

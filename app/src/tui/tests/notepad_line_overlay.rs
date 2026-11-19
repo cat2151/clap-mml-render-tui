@@ -30,13 +30,13 @@ fn notepad_with_lines(lines: &[&str], cursor: usize) -> TuiApp<'static> {
 
 /// 行頭 JSON の書き方（空白・key の順・他の key）や `;` の多声、読めない JSON まで含めた行。
 const ROUND_TRIP_LINES: &[&str] = &[
-    r#"{"Surge XT patch":"Pads/Pad 1.fxp"}  l8cdef"#,
-    r#"{ "Surge XT patch filter" : "pad",  "Surge XT patch": "Pads/Pad 1.fxp" } o5 c4"#,
-    r#"{"Surge XT patch":"Pads/Pad 1.fxp","effects after instrument":[{"plugin":"Reverb"}]} cde"#,
-    r#"{"Surge XT patch":"Pads/A.fxp"} c;{"Surge XT patch":"Pads/B.fxp"} e"#,
+    r#"{"patch":"Pads/Pad 1.fxp:"}  l8cdef"#,
+    r#"{ "patch filter" : "pad",  "patch": "Pads/Pad 1.fxp:" } o5 c4"#,
+    r#"{"patch":"Pads/Pad 1.fxp:","effects after instrument":[{"plugin":"Reverb"}]} cde"#,
+    r#"{"patch":"Pads/A.fxp:"} c;{"patch":"Pads/B.fxp:"} e"#,
     "l8cdef",
     "  o4 c  ",
-    r#"{"Surge XT patch": cde"#,
+    r#"{"patch": cde"#,
     "",
 ];
 
@@ -91,7 +91,7 @@ fn i_then_enter_without_edits_keeps_the_line_and_adds_one_blank_line_below() {
 #[test]
 fn o_and_shift_o_then_esc_keep_other_lines_and_the_inserted_blank_line() {
     let (_tmp, _env_guard) = temp_local_dirs("notepad_line_overlay_o_esc");
-    let first = r#"{"Surge XT patch":"Pads/Pad 1.fxp"}  l8cdef"#;
+    let first = r#"{"patch":"Pads/Pad 1.fxp:"}  l8cdef"#;
     for (key, expected) in [('o', [first, "", "cde"]), ('O', ["", first, "cde"])] {
         let mut app = notepad_with_lines(&[first, "cde"], 0);
 
@@ -109,7 +109,7 @@ fn o_and_shift_o_then_esc_keep_other_lines_and_the_inserted_blank_line() {
 
 #[test]
 fn i_opens_the_line_body_with_the_line_patch_in_advance_mode() {
-    let line = r#"{"Surge XT patch":"Pads/Pad 1.fxp"}  l8cdef"#;
+    let line = r#"{"patch":"Pads/Pad 1.fxp:"}  l8cdef"#;
     let mut app = notepad_with_lines(&[line], 0);
     app.mml_overlay_patch = Some("Global/Pad.fxp".to_string());
 
@@ -136,7 +136,7 @@ fn i_opens_the_line_body_with_the_line_patch_in_advance_mode() {
 #[test]
 fn typed_mml_is_written_after_the_original_json_prefix() {
     let (_tmp, _env_guard) = temp_local_dirs("notepad_line_overlay_typed");
-    let prefix = r#"{ "Surge XT patch" : "Pads/Pad 1.fxp" }  "#;
+    let prefix = r#"{ "patch" : "Pads/Pad 1.fxp:" }  "#;
     let mut app = notepad_with_lines(&[&format!("{prefix}l8cdef")], 0);
 
     press_notepad(&mut app, plain(KeyCode::Char('i')));
@@ -155,7 +155,7 @@ fn typed_mml_is_written_after_the_original_json_prefix() {
 fn ctrl_t_patch_is_written_into_the_json_at_commit_keeping_filter() {
     let (_tmp, _env_guard) = temp_local_dirs("notepad_line_overlay_patch");
     let mut app = notepad_with_lines(
-        &[r#"{"Surge XT patch":"Pads/Pad 1.fxp","Surge XT patch filter":"pad"} l8cdef"#],
+        &[r#"{"patch":"Pads/Pad 1.fxp:","patch filter":"pad"} l8cdef"#],
         0,
     );
     *app.patch_load_state.lock().unwrap() =
@@ -169,7 +169,7 @@ fn ctrl_t_patch_is_written_into_the_json_at_commit_keeping_filter() {
 
     let line = &app.notepad.session_lines()[0];
     let json = json_value(line);
-    assert_eq!(json["Surge XT patch"], "Pads/New Pad.fxp");
-    assert_eq!(json["Surge XT patch filter"], "pad");
+    assert_eq!(json["patch"], "Pads/New Pad.fxp:");
+    assert_eq!(json["patch filter"], "pad");
     assert!(line.ends_with(" l8cdef"), "{line:?}");
 }

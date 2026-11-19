@@ -63,7 +63,7 @@ fn alt_arrows_stop_at_the_first_and_last_line() {
 
 #[test]
 fn reordering_preserves_line_contents_playback_history_and_yank_buffer() {
-    const MML: &str = r#"  {"Surge XT patch":"Pads/Pad 1.fxp"} o4c; o3g  "#;
+    const MML: &str = r#"  {"patch":"Pads/Pad 1.fxp:"} o4c; o3g  "#;
     let mut app = screen_on(&[MML, "", MML], 0);
     app.editor.yank_buffer = Some("o4a".to_string());
     app.playback

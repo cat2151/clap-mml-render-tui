@@ -191,7 +191,7 @@ fn the_measure_mml_sounds_the_generated_and_the_handwritten_track_together() {
 fn the_generate_key_in_the_json_prefix_does_not_swallow_any_note() {
     let mut data = data_with_chord_row("", &[(1, "I")]);
     data[GENERATED_TRACK][0] =
-        r#"{"Surge XT patch": "piano", "generate from chord track": "close"}"#.to_string();
+        r#"{"patch": "piano:", "generate from chord track": "close"}"#.to_string();
 
     // 最終 MML の先頭 JSON に生成キーが残っていても、ノートは 3 つとも残る。
     assert_eq!(

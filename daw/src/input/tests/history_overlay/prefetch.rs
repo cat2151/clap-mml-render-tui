@@ -5,7 +5,7 @@ fn handle_history_overlay_j_prefetches_predicted_preview_cache() {
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_track = 2;
     app.editor.cursor_measure = 1;
-    app.editor.data[2][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#.to_string();
+    app.editor.data[2][0] = r#"{"patch":"Pads/Pad 1.fxp:"}"#.to_string();
     app.patch_phrase_store.patches.insert(
         "Bass/Bass 1.fxp".to_string(),
         cmrt_history::PatchPhraseState {

@@ -105,7 +105,8 @@ pub(super) fn run_plan(
     supervisor: &RealtimePlayServerSupervisor,
     plan: &PreparePlan,
 ) -> Result<Option<VoicingReport>> {
-    let patch = plan.patch.as_deref();
+    let wire = plan.patch.as_deref().map(cmrt_core::wire_from_display);
+    let patch = wire.as_deref();
     let mut report = None;
     for step in &plan.steps {
         match step {

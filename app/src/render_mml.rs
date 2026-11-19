@@ -367,14 +367,13 @@ fn print_duplicate_digests(renders: &[(String, u64)]) {
     }
 }
 
-/// MML 先頭 JSON へ音色を埋める。キーは `"Surge XT patch"` のまま
-/// （`docs/adr/0001-patch-string-decides-the-plugin.md`。どのプラグインで鳴るかは
-/// **値の形**で決まるので、キーの綴りは 3 種別に増えても変えない）。
+/// MML 先頭 JSON へ音色（表示名）を wire にして埋める。
 pub(crate) fn mml_with_patch(patch: Option<&str>, mml: &str) -> String {
     let Some(patch) = patch else {
         return mml.to_string();
     };
-    let json = serde_json::json!({ "Surge XT patch": patch });
+    let json =
+        serde_json::json!({ cmrt_core::PATCH_JSON_KEY: cmrt_core::wire_from_display(patch) });
     format!("{json}{mml}")
 }
 

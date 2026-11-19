@@ -1,6 +1,6 @@
 //! 編集可能な grid の復元・保存と instance 数変更時の引継ぎ。
 
-use crate::{CycleRandom, GridInstance, GridSequencerScreen, GridState};
+use crate::{CycleRandom, GridInstance, GridSequencerScreen, GridState, PluginWeights};
 
 /// セッションへ保存する固定コード進行。解析済み派生値ではなく、再編集できる元入力を持つ。
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -25,6 +25,7 @@ pub struct GridSequencerSession {
     pub instances: Vec<GridInstance>,
     pub cycle_random: CycleRandom,
     pub fixed_chord: Option<FixedChordProgression>,
+    pub plugin_weights: PluginWeights,
 }
 
 impl GridSequencerSession {
@@ -33,11 +34,17 @@ impl GridSequencerSession {
             instances,
             cycle_random,
             fixed_chord: None,
+            plugin_weights: PluginWeights::default(),
         }
     }
 
     pub fn with_fixed_chord(mut self, fixed_chord: Option<FixedChordProgression>) -> Self {
         self.fixed_chord = fixed_chord;
+        self
+    }
+
+    pub fn with_plugin_weights(mut self, plugin_weights: PluginWeights) -> Self {
+        self.plugin_weights = plugin_weights;
         self
     }
 }
@@ -48,6 +55,7 @@ impl GridSequencerScreen {
             instances: self.state.instances().to_vec(),
             cycle_random: self.cycle_random,
             fixed_chord: self.fixed_chord.clone(),
+            plugin_weights: self.plugin_weights.clone(),
         })
     }
 

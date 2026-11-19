@@ -31,9 +31,8 @@ pub(super) const MEASURE: usize = 1;
 const WIDE_MEASURES: usize = 8;
 
 /// wizard が init セルへ書く JSON。キーは serde_json の Map（BTreeMap）順、
-/// つまり `"Surge XT patch"` が `"generate from chord track"` より先に出る。
-const INIT_WITH_PATCH: &str =
-    r#"{"Surge XT patch":"Pad 1.fxp","generate from chord track":"close"}"#;
+/// つまり `"patch"` が `"generate from chord track"` より先に出る。
+const INIT_WITH_PATCH: &str = r#"{"generate from chord track":"close","patch":"Pad 1.fxp:"}"#;
 
 /// crossterm は Shift 付きの大文字として届けるので、テストもその形で送る。
 pub(super) fn press_g(app: &mut DawApp) {
@@ -158,14 +157,13 @@ fn the_wizard_keeps_an_existing_patch_and_only_adds_the_generate_key() {
     let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("daw_cache");
     let (mut app, _cache_rx) = build_test_app();
     cursor_at_wizard_target(&mut app);
-    app.editor.data[TRACK][0] =
-        r#"{"Surge XT patch": "Chosen.fxp", "Surge XT patch filter": "pad"}"#.to_string();
+    app.editor.data[TRACK][0] = r#"{"patch": "Chosen.fxp:", "patch filter": "pad"}"#.to_string();
 
     app.apply_chord_wizard_with("I-IV", None);
 
     assert_eq!(
         app.editor.data[TRACK][0],
-        r#"{"Surge XT patch":"Chosen.fxp","Surge XT patch filter":"pad","generate from chord track":"close"}"#
+        r#"{"generate from chord track":"close","patch":"Chosen.fxp:","patch filter":"pad"}"#
     );
 }
 
@@ -176,7 +174,7 @@ fn the_wizard_files_the_handwritten_cell_into_patch_history_before_clearing_it()
     let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("daw_cache");
     let (mut app, _cache_rx) = build_test_app();
     cursor_at_wizard_target(&mut app);
-    app.editor.data[TRACK][0] = r#"{"Surge XT patch": "Chosen.fxp"}"#.to_string();
+    app.editor.data[TRACK][0] = r#"{"patch": "Chosen.fxp:"}"#.to_string();
     app.editor.data[TRACK][MEASURE] = "cde".to_string();
 
     app.apply_chord_wizard_with("I-IV", None);
@@ -294,7 +292,7 @@ fn undo_restores_every_cell_the_wizard_wrote() {
     let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("wizard_undo_restores");
     let (mut app, _cache_rx) = build_test_app();
     cursor_at_wizard_target(&mut app);
-    app.editor.data[TRACK][0] = r#"{"Surge XT patch": "Chosen.fxp"}"#.to_string();
+    app.editor.data[TRACK][0] = r#"{"patch": "Chosen.fxp:"}"#.to_string();
     app.editor.data[TRACK][MEASURE] = "cde".to_string();
     app.editor.data[CHORD_TRACK][MEASURE] = "V".to_string();
 
@@ -302,10 +300,7 @@ fn undo_restores_every_cell_the_wizard_wrote() {
     press_u(&mut app);
 
     assert_eq!(app.editor.data[CHORD_TRACK][MEASURE], "V");
-    assert_eq!(
-        app.editor.data[TRACK][0],
-        r#"{"Surge XT patch": "Chosen.fxp"}"#
-    );
+    assert_eq!(app.editor.data[TRACK][0], r#"{"patch": "Chosen.fxp:"}"#);
     assert_eq!(app.editor.data[TRACK][MEASURE], "cde");
     assert!(app.editor.cell_undo.is_none());
 }

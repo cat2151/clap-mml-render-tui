@@ -120,7 +120,7 @@ fn play_smf_posts_binary_body_to_play_endpoint() {
 fn play_mml_posts_text_body_to_play_mml_endpoint() {
     let (port, rx) = spawn_one_request_server("HTTP/1.1 202 Accepted", "accepted");
     let supervisor = RealtimePlayServerSupervisor::new(&cfg_for_port(port));
-    let mml = "{\"Surge XT patch\": \"Keys/DX EP.fxp\"}cde";
+    let mml = "{\"patch\": \"Keys/DX EP.fxp:\"}cde";
     supervisor.play_mml(mml, vec![0, 1, 2]).unwrap();
 
     let request = rx.recv().unwrap();

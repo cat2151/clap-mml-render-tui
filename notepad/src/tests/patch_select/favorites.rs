@@ -20,7 +20,7 @@ fn f_adds_the_selected_patch_and_line_phrase_to_favorites() {
     assert!(app.patch_select.as_ref().unwrap().is_favorite("Tone 01"));
     assert_eq!(
         playing(&app).as_deref(),
-        Some(r#"{"Surge XT patch": "Tone 01"} l8cdef"#)
+        Some(r#"{"patch": "Tone 01:"} l8cdef"#)
     );
     choose_favorite_preset(&mut app);
     assert_eq!(patch_select_list(&app), vec!["Tone 01"]);

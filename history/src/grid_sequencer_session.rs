@@ -26,6 +26,8 @@ pub struct GridSequencerSessionState {
     pub instances: Vec<GridSequencerInstanceState>,
     pub cycle_random: GridCycleRandomState,
     pub fixed_chord: Option<GridFixedChordState>,
+    /// 音色の自動抽選で出現率を `0` にした plugin のプロファイル名。無ければ field ごと省く。
+    pub zero_weight_plugins: Vec<String>,
 }
 
 /// 固定コード進行の永続化形式。派生したnoteではなく、再parse・再編集できる元入力を持つ。
@@ -39,12 +41,17 @@ impl Serialize for GridSequencerSessionState {
     where
         S: Serializer,
     {
-        let field_count = 2 + usize::from(self.fixed_chord.is_some());
+        let field_count = 2
+            + usize::from(self.fixed_chord.is_some())
+            + usize::from(!self.zero_weight_plugins.is_empty());
         let mut state = serializer.serialize_struct("GridSequencerSessionState", field_count)?;
         state.serialize_field("instances", &self.instances)?;
         state.serialize_field("cycle_random", &self.cycle_random)?;
         if let Some(fixed_chord) = &self.fixed_chord {
             state.serialize_field("fixed_chord", fixed_chord)?;
+        }
+        if !self.zero_weight_plugins.is_empty() {
+            state.serialize_field("zero_weight_plugins", &self.zero_weight_plugins)?;
         }
         state.end()
     }
@@ -72,10 +79,15 @@ impl<'de> Deserialize<'de> for GridSequencerSessionState {
         let fixed_chord = object
             .get("fixed_chord")
             .and_then(|value| serde_json::from_value(value.clone()).ok());
+        let zero_weight_plugins = object
+            .get("zero_weight_plugins")
+            .and_then(|value| serde_json::from_value(value.clone()).ok())
+            .unwrap_or_default();
         Ok(Self {
             instances,
             cycle_random,
             fixed_chord,
+            zero_weight_plugins,
         })
     }
 }

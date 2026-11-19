@@ -68,7 +68,7 @@ fn a_generated_track_plays_the_chord_row_instead_of_its_empty_cell() {
 #[test]
 fn a_track_without_the_generate_key_stays_empty() {
     let mut data = data_with_chord_row("", &[(1, "I-IV")]);
-    data[GENERATED_TRACK][0] = r#"{"Surge XT patch": "piano"}"#.to_string();
+    data[GENERATED_TRACK][0] = r#"{"patch": "piano:"}"#.to_string();
 
     let mml = build_cell_mml_from_data(&data, MEASURES, GENERATED_TRACK, 1);
 
@@ -172,12 +172,12 @@ fn the_chord_row_itself_is_never_generated_from_itself() {
 fn the_generate_key_survives_into_the_json_prefix_and_the_mml_still_parses() {
     let mut data = data_with_chord_row("", &[(1, "I-IV")]);
     data[GENERATED_TRACK][0] =
-        r#"{"Surge XT patch": "piano", "generate from chord track": "close"}"#.to_string();
+        r#"{"patch": "piano:", "generate from chord track": "close"}"#.to_string();
 
     let mml = build_cell_mml_from_data(&data, MEASURES, GENERATED_TRACK, 1);
 
     let json = split_final_mml(&mml).0.expect("JSON prefix");
-    assert_eq!(json["Surge XT patch"], "piano");
+    assert_eq!(json["patch"], "piano:");
     assert_eq!(json["generate from chord track"], "close");
     // 未知のキーが混ざっても MML パーサは受け付ける（実測済み）。
     assert!(mmlabc_to_smf::mml_to_smf_bytes(&mml).is_ok());

@@ -107,12 +107,21 @@ fn extend_with_paths(
             PatchBase::PerRoot(_) => plugin.base.display(&canonical),
             PatchBase::None => path.to_string_lossy().into_owned(),
         };
+        // 拡張子を共有する plugin（`.h2p` の Zebralette3 など）の音色は、表示名にタグを残す。
+        let display = match plugin_tag(plugin) {
+            "" => display,
+            tag => format!("{display}:{tag}"),
+        };
         if let Some(merged) = merged {
             listing.merged.insert(display.clone(), merged);
         }
         let lower = display.to_lowercase();
         listing.pairs.push((display, lower));
     }
+}
+
+fn plugin_tag(plugin: &CatalogPlugin) -> &'static str {
+    cmrt_core::patch_tag_of(plugin.plugin_id.as_deref(), &plugin.plugin_path)
 }
 
 fn relative_display(base: &str, path: &Path) -> String {

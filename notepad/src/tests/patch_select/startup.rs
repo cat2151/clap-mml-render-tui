@@ -5,7 +5,7 @@ fn open_patch_select_overlay_selects_requested_initial_patch_and_previews_it() {
     let mut app = NotepadScreen::new_for_test(test_config());
     open_patch_select_for_test(
         &mut app,
-        r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#,
+        r#"{"patch":"Pads/Pad 1.fxp:"} l8cdef"#,
         &["Pads/Pad 1.fxp", "Leads/Lead 1.fxp", "Bass/Bass 1.fxp"],
     );
 
@@ -16,7 +16,7 @@ fn open_patch_select_overlay_selects_requested_initial_patch_and_previews_it() {
     assert_eq!(preset_label(&app), "lead");
     assert_eq!(
         playing(&app).as_deref(),
-        Some(r#"{"Surge XT patch": "Leads/Lead 1.fxp"} l8cdef"#)
+        Some(r#"{"patch": "Leads/Lead 1.fxp:"} l8cdef"#)
     );
 }
 
@@ -26,7 +26,7 @@ fn opening_starts_on_the_current_line_patch_in_the_preset_that_matches_it() {
 
     open_patch_select_for_test(
         &mut app,
-        r#"{"Surge XT patch":"Pads/Pad 2.fxp"} l8cdef"#,
+        r#"{"patch":"Pads/Pad 2.fxp:"} l8cdef"#,
         &["Pads/Pad 1.fxp", "Pads/Pad 2.fxp", "Leads/Lead 1.fxp"],
     );
 

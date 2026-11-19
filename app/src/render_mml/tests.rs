@@ -29,7 +29,7 @@ fn mixed_catalog() -> PatchPlugins {
 fn a_patch_is_embedded_in_the_mml_head_json() {
     assert_eq!(
         mml_with_patch(Some("AR Accent Arp.vvp"), "t120o4l4c"),
-        r#"{"Surge XT patch":"AR Accent Arp.vvp"}t120o4l4c"#
+        r#"{"patch":"AR Accent Arp.vvp:"}t120o4l4c"#
     );
 }
 
@@ -46,8 +46,8 @@ fn a_patch_with_json_metacharacters_is_escaped() {
     let json_end = line.find('}').unwrap() + 1;
     let value: serde_json::Value = serde_json::from_str(&line[..json_end]).unwrap();
     assert_eq!(
-        value.get("Surge XT patch").and_then(|v| v.as_str()),
-        Some(r#"My"Bank\PD Emily.vvp"#)
+        value.get("patch").and_then(|v| v.as_str()),
+        Some(r#"My"Bank\PD Emily.vvp:"#)
     );
 }
 
@@ -269,7 +269,7 @@ fn an_out_dir_is_created_if_it_does_not_exist() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// 先頭 JSON へ埋めた音色が、レンダリング側の読み出しでそのまま戻ること。
+/// 先頭 JSON へ埋めた音色が、レンダリング側の読み出しで空タグ付きの wire として戻ること。
 ///
 /// **アポストロフィ入りの実プリセット名**（`AT I'll House Your Grains.vvp` /
 /// `FX The Wolves's Cries.vvp`）が要注意。MML の和音記法が `'...'` なので、
@@ -286,8 +286,8 @@ fn a_patch_name_round_trips_through_the_mml_head_json() {
     ] {
         let line = mml_with_patch(Some(patch), POLY_CHECK_CHORD_MML);
         assert_eq!(
-            cmrt_core::embedded_patch_ref(&line).as_deref(),
-            Some(patch),
+            cmrt_core::embedded_patch_ref(&line).unwrap().as_deref(),
+            Some(format!("{patch}:").as_str()),
             "{patch}"
         );
     }

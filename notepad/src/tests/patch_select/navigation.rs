@@ -1,7 +1,7 @@
 use super::*;
 
 fn tone_mml(patch: &str) -> String {
-    format!(r#"{{"Surge XT patch": "{patch}"}} l8cdef"#)
+    format!(r#"{{"patch": "{patch}:"}} l8cdef"#)
 }
 
 #[test]
@@ -69,7 +69,7 @@ fn h_moves_to_the_preset_and_role_panes_that_change_the_list() {
     let mut app = NotepadScreen::new_for_test(test_config());
     open_patch_select_for_test(
         &mut app,
-        r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#,
+        r#"{"patch":"Pads/Pad 1.fxp:"} l8cdef"#,
         &["Pads/Pad 1.fxp", "Pads/Pad 2.fxp", "Leads/Lead 1.fxp"],
     );
 

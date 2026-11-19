@@ -79,7 +79,7 @@ fn selecting_sfz_requests_preview_without_changing_its_display_string() {
 fn sfz_keeps_the_existing_mml_json_key_and_reaches_keyboard() {
     let mut app = app_with_sfz_patch();
     app.notepad
-        .set_session_lines_for_test(vec![format!("{{\"Surge XT patch\":\"{SFZ_PATCH}\"}} c")]);
+        .set_session_lines_for_test(vec![format!("{{\"patch\":\"{SFZ_PATCH}:\"}} c")]);
 
     app.start_keyboard_from_notepad();
 

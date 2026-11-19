@@ -26,6 +26,11 @@ pub use clap_mml_play_server_core::{
     PluginVoicingSource, RouteError,
 };
 pub use clap_mml_play_server_core::{set_log_sink, LogSink};
+// MML 先頭 JSON の音色キーと、patch 文字列（wire）と表示名の変換。解釈系は play server 側だけに置く。
+pub use clap_mml_play_server_core::{
+    parse_patch_wire, patch_display_from_embedded_json, patch_from_embedded_json, patch_tag_of,
+    split_display, wire_from_display, PATCH_FILTER_QUERY_JSON_KEY, PATCH_JSON_KEY,
+};
 // catalog 構築の前に、ディスクに無い音色（plugin 埋め込みの factory 音色）を取得する。
 pub use clap_mml_play_server_core::{prepare_downloaded_patches, PatchDownload};
 // catalog 構築が `.sfz` の sample 総容量を記録し、重い patch を先読みから外すために使う。
@@ -50,33 +55,39 @@ pub use cache_dirs::{
 };
 pub use core_config::{core_config_for_plugin, core_config_from_config};
 
-/// MML 先頭 JSON の `"Surge XT patch"` を解決済みのパス
-/// （`patches_factory` 等のプレフィックス補完込み）に書き換えた MML を返す。
+/// MML 先頭 JSON の音色（wire）のパス部分を解決済みのパス
+/// （`patches_factory` 等のプレフィックス補完込み）に書き換えた MML を返す。タグは残す。
 /// play server など JSON 込み MML を受け取る外部プロセスへ渡す前の正規化に使う。
-/// 他のキー（effect chain など）はそのまま残す。
+/// 他のキー（effect chain など）はそのまま残す。旧キー・旧形式の音色は書き換えず、受け取った側のエラーに任せる。
 pub fn mml_with_resolved_embedded_patch<'a>(mml: &'a str, cfg: &CoreConfig) -> Cow<'a, str> {
     let preprocessed = mml_preprocessor::extract_embedded_json(mml);
-    let Some(resolved_patch) = extract_patch_from_json(preprocessed.embedded_json.as_deref(), cfg)
-    else {
-        return Cow::Borrowed(mml);
-    };
     let Some(embedded_json) = preprocessed.embedded_json.as_deref() else {
         return Cow::Borrowed(mml);
     };
     let Ok(mut value) = serde_json::from_str::<serde_json::Value>(embedded_json) else {
         return Cow::Borrowed(mml);
     };
+    let Some(resolved_wire) = resolve_patch_wire_from_json(&value, cfg) else {
+        return Cow::Borrowed(mml);
+    };
     let Some(object) = value.as_object_mut() else {
         return Cow::Borrowed(mml);
     };
     object.insert(
-        "Surge XT patch".to_string(),
-        serde_json::Value::String(patch_value_for_core_embedded_json(&resolved_patch, cfg)),
+        PATCH_JSON_KEY.to_string(),
+        serde_json::Value::String(resolved_wire),
     );
     match serde_json::to_string(&value) {
         Ok(json) => Cow::Owned(format!("{json}{}", preprocessed.remaining_mml)),
         Err(_) => Cow::Borrowed(mml),
     }
+}
+
+/// 先頭 JSON の音色 wire を、パス部分だけ `cfg.patch_base` の表記へ直した wire にする。
+fn resolve_patch_wire_from_json(value: &serde_json::Value, cfg: &CoreConfig) -> Option<String> {
+    let wire = parse_patch_wire(patch_from_embedded_json(value).ok()??).ok()?;
+    let resolved_patch = extract_patch_path(wire.path, cfg);
+    Some(wire.with_path(&patch_value_for_core_embedded_json(&resolved_patch, cfg)))
 }
 
 fn patch_value_for_core_embedded_json(resolved_patch: &str, cfg: &CoreConfig) -> String {
@@ -90,22 +101,18 @@ fn patch_value_for_core_embedded_json(resolved_patch: &str, cfg: &CoreConfig) ->
     }
 }
 
-/// MML 先頭 JSON から `"Surge XT patch"` を取り出してパッチパスに解決する。
+/// タグを剥がした音色パスを、`cfg.patch_base` の配下のパスへ解決する。
 ///
-/// JSON に相対パスが入っていて `cfg.patch_base` がある場合はその配下のパスに変換し、
-/// 無い場合は JSON の文字列をそのまま返す。
-fn extract_patch_from_json(json_str: Option<&str>, cfg: &CoreConfig) -> Option<String> {
-    let json_str = json_str?;
-    let value: serde_json::Value = serde_json::from_str(json_str).ok()?;
-    let rel = value.get("Surge XT patch")?.as_str()?;
+/// 相対パスで `cfg.patch_base` があればその配下のパスに変換し、無ければそのまま返す。
+fn extract_patch_path(rel: &str, cfg: &CoreConfig) -> String {
     let rel_path = normalize_patch_path(rel);
 
     match &cfg.patch_base {
         PatchBase::Shared(base) => {
             let abs = resolve_patch_path_from_base(std::path::Path::new(base), &rel_path);
-            Some(abs.to_string_lossy().into_owned())
+            abs.to_string_lossy().into_owned()
         }
-        base => Some(base.resolve(&rel_path.to_string_lossy())),
+        base => base.resolve(&rel_path.to_string_lossy()),
     }
 }
 

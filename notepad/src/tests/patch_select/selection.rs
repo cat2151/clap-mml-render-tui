@@ -5,7 +5,7 @@ fn enter_replaces_the_patch_and_keeps_the_line_filter_word() {
     let mut app = NotepadScreen::new_for_test(test_config());
     open_patch_select_for_test(
         &mut app,
-        r#"{"Surge XT patch":"Pads/Pad 1.fxp","Surge XT patch filter":"pads"} l8cdef"#,
+        r#"{"patch":"Pads/Pad 1.fxp:","patch filter":"pads"} l8cdef"#,
         &["Pads/Pad 1.fxp", "Pads/Pad 2.fxp", "Leads/Lead 1.fxp"],
     );
     press(&mut app, KeyCode::Char('/'));
@@ -19,10 +19,7 @@ fn enter_replaces_the_patch_and_keeps_the_line_filter_word() {
     assert!(app.patch_select.is_none());
     assert_eq!(
         app.editor.lines,
-        vec![
-            r#"{"Surge XT patch": "Pads/Pad 2.fxp", "Surge XT patch filter": "pads"} l8cdef"#
-                .to_string()
-        ]
+        vec![r#"{"patch": "Pads/Pad 2.fxp:", "patch filter": "pads"} l8cdef"#.to_string()]
     );
 }
 
@@ -34,7 +31,7 @@ fn enter_records_history_and_primes_the_returned_line_into_cache() {
 
     press(&mut app, KeyCode::Enter);
 
-    let line = r#"{"Surge XT patch": "Tone 01"} l8cdef"#;
+    let line = r#"{"patch": "Tone 01:"} l8cdef"#;
     assert_eq!(app.editor.lines, vec![line.to_string()]);
     assert_eq!(
         app.patch_phrase_store

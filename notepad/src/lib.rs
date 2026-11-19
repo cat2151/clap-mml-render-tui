@@ -47,8 +47,7 @@ use render_queue::TuiRenderQueue;
 
 /// audio_cache の最大エントリ数。超過時は古いエントリから1件ずつ退避する。
 const AUDIO_CACHE_MAX_ENTRIES: usize = 64;
-pub(crate) const PATCH_JSON_KEY: &str = "Surge XT patch";
-pub(crate) const PATCH_FILTER_QUERY_JSON_KEY: &str = "Surge XT patch filter";
+pub(crate) use cmrt_core::{PATCH_FILTER_QUERY_JSON_KEY, PATCH_JSON_KEY};
 /// カーソル行に音色の行頭 JSON が無いため、音色を前提にした操作ができないときの文言。
 pub(crate) const PATCH_NAME_JSON_NOT_FOUND: &str = "patch name JSON が見つかりません";
 

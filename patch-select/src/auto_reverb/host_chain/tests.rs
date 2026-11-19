@@ -22,7 +22,7 @@ fn delay() -> Value {
 }
 
 fn head(chain: Vec<Value>, recorded: Option<Value>) -> Value {
-    let mut json = json!({ "Surge XT patch": "Pads/Pad 1.fxp", EFFECT_CHAIN_JSON_KEY: chain });
+    let mut json = json!({ "patch": "Pads/Pad 1.fxp:", EFFECT_CHAIN_JSON_KEY: chain });
     if let Some(recorded) = recorded {
         json[AUTO_REVERB_JSON_KEY] = recorded;
     }
@@ -122,7 +122,7 @@ fn write_into_sets_the_chain_and_the_record_and_removes_them_when_dry() {
     assert!(object.get(EFFECT_CHAIN_JSON_KEY).is_none());
     assert!(object.get(AUTO_REVERB_JSON_KEY).is_none());
     assert!(object.get(MANUAL_REVERB_JSON_KEY).is_none());
-    assert_eq!(object["Surge XT patch"], "Pads/Pad 1.fxp");
+    assert_eq!(object["patch"], "Pads/Pad 1.fxp:");
 }
 
 #[test]

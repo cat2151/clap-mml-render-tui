@@ -2,7 +2,7 @@ use super::*;
 use crate::input::HeavyPreview;
 
 fn tone_mml(index: usize) -> String {
-    format!(r#"{{"Surge XT patch": "Tone {index:02}"}} l8cdef"#)
+    format!(r#"{{"patch": "Tone {index:02}:"}} l8cdef"#)
 }
 
 fn confirming(app: &NotepadScreen<'_>) -> bool {

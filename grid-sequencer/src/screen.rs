@@ -83,6 +83,8 @@ pub struct GridSequencerScreen {
     pub(crate) chord_input: Option<crate::chord_input::ChordInputOverlay>,
     /// コード進行1周ごとに何を引き直すか。詳細は [`crate::cycle_random`]。
     pub(crate) cycle_random: CycleRandom,
+    /// 音色の自動抽選での plugin ごとの出現率。詳細は [`crate::plugin_weight`]。
+    pub(crate) plugin_weights: crate::PluginWeights,
     /// `a` キーで開く、1周ごとの random 設定 overlay。`None` なら閉じている。
     pub(crate) cycle_random_overlay: Option<CycleRandomOverlay>,
     /// mouse down から up まで継続するnote eventの描画・消去操作。
@@ -179,30 +181,37 @@ impl GridSequencerScreen {
         let track_count = cmrt_realtime_play::normalize_live_instance_count(track_count);
         let restored_session = restored_session.filter(|session| !session.instances.is_empty());
         let restored = restored_session.is_some();
-        let (state, mut cycle_random, fixed_chord) = if let Some(session) = restored_session {
-            let mut instances = session.instances;
-            let saved_count = instances.len();
-            while instances.len() < track_count {
-                instances.push(crate::GridInstance::new(instances.len()));
-            }
-            instances.truncate(track_count);
-            // 保存値が track 数に足りないぶんは譜面を抽選して埋める。空のまま足すと
-            // NOTE を OFF にしている間は引き直しが走らず、その行が無音のままになる。
-            // patch 一覧はまだ読み込み中なので、音色は後から `fill_missing_patches` が当てる。
-            if let Some(added) = instances.get_mut(saved_count..) {
-                crate::randomize_instance_slice(added, &[], CycleRandom::ALL, None, None);
-            }
-            let mut state = GridState::with_instance_count(track_count);
-            let restored = state.restore_instances(instances);
-            debug_assert!(restored);
-            (state, session.cycle_random, session.fixed_chord)
-        } else {
-            (
-                GridState::with_instance_count(track_count),
-                CycleRandom::ALL,
-                None,
-            )
-        };
+        let (state, mut cycle_random, fixed_chord, plugin_weights) =
+            if let Some(session) = restored_session {
+                let mut instances = session.instances;
+                let saved_count = instances.len();
+                while instances.len() < track_count {
+                    instances.push(crate::GridInstance::new(instances.len()));
+                }
+                instances.truncate(track_count);
+                // 保存値が track 数に足りないぶんは譜面を抽選して埋める。空のまま足すと
+                // NOTE を OFF にしている間は引き直しが走らず、その行が無音のままになる。
+                // patch 一覧はまだ読み込み中なので、音色は後から `fill_missing_patches` が当てる。
+                if let Some(added) = instances.get_mut(saved_count..) {
+                    crate::randomize_instance_slice(added, &[], CycleRandom::ALL, None, None);
+                }
+                let mut state = GridState::with_instance_count(track_count);
+                let restored = state.restore_instances(instances);
+                debug_assert!(restored);
+                (
+                    state,
+                    session.cycle_random,
+                    session.fixed_chord,
+                    session.plugin_weights,
+                )
+            } else {
+                (
+                    GridState::with_instance_count(track_count),
+                    CycleRandom::ALL,
+                    None,
+                    crate::PluginWeights::default(),
+                )
+            };
         // fixed_chord が残っているセッションでは固定指定を正本とする。通常の保存経路では
         // CHORD ON 時に fixed_chord を消すが、手編集された不整合JSONも安全側へ正規化する。
         if fixed_chord.is_some() {
@@ -224,6 +233,7 @@ impl GridSequencerScreen {
             bpm_input: None,
             chord_input: None,
             cycle_random,
+            plugin_weights,
             cycle_random_overlay: None,
             note_gesture: None,
             patch_selector: None,

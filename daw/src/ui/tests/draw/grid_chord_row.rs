@@ -12,7 +12,7 @@ const TEST_CHORD_DIRECTIVE: &str = "close";
 
 /// 音色と「chord 行から生成する」指定の両方が入った init セル。
 fn generated_init_cell(display: &str, directive: &str) -> String {
-    format!(r#"{{"Surge XT patch": "{display}", "generate from chord track": "{directive}"}}"#)
+    format!(r#"{{"patch": "{display}:", "generate from chord track": "{directive}"}}"#)
 }
 
 /// chord 行に `I-IV` があり、T1 だけがそこから生成される app。

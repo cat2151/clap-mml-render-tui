@@ -11,6 +11,7 @@ fn fixed_chord_text_round_trips_between_history_and_domain() {
         fixed_chord: Some(crate::history::GridFixedChordState {
             input: "KEY:G♭ Isus4-I".to_string(),
         }),
+        zero_weight_plugins: Vec::new(),
     };
 
     let domain = grid_session_from_history(Some(history)).unwrap();

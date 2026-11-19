@@ -77,7 +77,7 @@ impl GridSenderBackend for SupervisorBackend {
     ) -> anyhow::Result<Self::Standby> {
         self.supervisor.begin_standby_patch_with_effect_chain(
             instance_id,
-            patch.patch.as_deref(),
+            patch.wire().as_deref(),
             &patch.effect_chain,
         )
     }

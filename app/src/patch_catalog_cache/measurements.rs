@@ -31,7 +31,9 @@ pub(super) fn collect_patch_load_measurements(
     let progress_started = Instant::now();
     Ok(measure_patch_loads(
         pairs,
-        |instance_id, patch| supervisor.prepare_live_patch(instance_id, Some(patch)),
+        |instance_id, patch| {
+            supervisor.prepare_live_patch(instance_id, Some(&cmrt_core::wire_from_display(patch)))
+        },
         Instant::now,
         |index, patch| {
             report_progress(format!(

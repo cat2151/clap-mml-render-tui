@@ -36,10 +36,8 @@ fn catalog() -> Vec<(String, String)> {
 
 fn selected_patch(app: &DawApp) -> String {
     let init_json: serde_json::Value = serde_json::from_str(&app.editor.data[2][0]).unwrap();
-    init_json["Surge XT patch"]
-        .as_str()
-        .expect("selected patch should be stored as string")
-        .to_string()
+    cmrt_core::patch_display_from_embedded_json(&init_json)
+        .expect("selected patch should be stored as a tagged string")
 }
 
 /// snapshot を注入した app で、track 2 の init セルを `patch` にしてから `r` を n 回押す。
@@ -55,7 +53,7 @@ fn press_r_from(tmp_name: &str, patch: &str, times: usize) -> Vec<String> {
         *app.patch_load.lock().unwrap() = PatchLoadState::ready(catalog());
         app.editor.cursor_track = 2;
         app.editor.cursor_measure = 0;
-        app.editor.data[2][0] = format!(r#"{{"Surge XT patch":"{patch}"}}"#);
+        app.editor.data[2][0] = format!(r#"{{"patch":"{patch}:"}}"#);
 
         (0..times)
             .map(|_| {
@@ -169,7 +167,7 @@ fn real_catalog_kick_track_keeps_drawing_kicks() {
         *app.patch_load.lock().unwrap() = PatchLoadState::ready(pairs);
         app.editor.cursor_track = 2;
         app.editor.cursor_measure = 0;
-        app.editor.data[2][0] = format!(r#"{{"Surge XT patch":"{}"}}"#, kicks[0]);
+        app.editor.data[2][0] = format!(r#"{{"patch":"{}:"}}"#, kicks[0]);
 
         for _ in 0..20 {
             app.handle_normal(crossterm::event::KeyCode::Char('r'));

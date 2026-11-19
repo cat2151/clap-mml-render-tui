@@ -11,7 +11,7 @@ DAW の track に挿す CLAP effect（TONE3000 / Surge XT Effects）は、その
 **init セルの JSON** に次の形で書く。
 
 ```json
-{"Surge XT patch": "patches_factory/Pads/Pad 1.fxp",
+{"patch": "patches_factory/Pads/Pad 1.fxp:",
  "effects after instrument": [
    {"TONE3000 preset": "Bogner Fullstack"},
    {"Surge XT Effects preset": "Reverb 1/Cathedral 2.srgfx", "bypass": true}
@@ -32,7 +32,7 @@ DAW の track に挿す CLAP effect（TONE3000 / Surge XT Effects）は、その
 
 - **cache key は init 込みの cell MML の hash**なので、chain を init JSON に置けば、変えたときの
   再 render が自動で走る。別の列や別ファイルに置くと、無効化の経路をもう 1 本持つことになる
-- `"Surge XT patch"`（[0003](0003-mml-patch-key.md)）は**値の形**で plugin を判別しているが、
+- `"patch"`（[0031](0031-tui-holds-display-names-and-writes-wire.md)）は**値の形**（拡張子とタグ）で plugin を判別しているが、
   effect ではそれができない。TONE3000 の値は preset 内の名前（ファイル名が uuid で読めない）で、
   拡張子が無い。だから**キー**で plugin を決める
 - `{"plugin": "…", "preset": "…"}` の 2 キー形にすると、TUI が `plugin` の値を見て分岐する経路が

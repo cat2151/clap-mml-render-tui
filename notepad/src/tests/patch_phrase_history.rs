@@ -4,9 +4,9 @@ use super::*;
 fn record_patch_phrase_history_uses_phrase_without_embedded_json() {
     let mut app = NotepadScreen::new_for_test(test_config());
 
-    app.record_patch_phrase_history(r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#);
-    app.record_patch_phrase_history(r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8efga"#);
-    app.record_patch_phrase_history(r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#);
+    app.record_patch_phrase_history(r#"{"patch":"Pads/Pad 1.fxp:"} l8cdef"#);
+    app.record_patch_phrase_history(r#"{"patch":"Pads/Pad 1.fxp:"} l8efga"#);
+    app.record_patch_phrase_history(r#"{"patch":"Pads/Pad 1.fxp:"} l8cdef"#);
 
     let stored = app
         .patch_phrase_store
@@ -25,10 +25,7 @@ fn record_patch_phrase_history_truncates_to_recent_100_items() {
     let mut app = NotepadScreen::new_for_test(test_config());
 
     for i in 0..105 {
-        app.record_patch_phrase_history(&format!(
-            r#"{{"Surge XT patch":"Pads/Pad 1.fxp"}} l8c{}"#,
-            i
-        ));
+        app.record_patch_phrase_history(&format!(r#"{{"patch":"Pads/Pad 1.fxp:"}} l8c{}"#, i));
     }
 
     let stored = app
@@ -49,7 +46,7 @@ fn record_patch_phrase_history_resolves_factory_prefixed_patch_name() {
         "patches_factory/Pads/Pad 1.fxp",
     ]))));
 
-    app.record_patch_phrase_history(r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#);
+    app.record_patch_phrase_history(r#"{"patch":"Pads/Pad 1.fxp:"} l8cdef"#);
 
     let stored = app
         .patch_phrase_store
@@ -108,7 +105,7 @@ fn patch_phrase_store_flushes_only_when_requested() {
     let _env_guards = cmrt_history::test_support::set_local_dir_envs(&tmp);
 
     let mut app = NotepadScreen::new_for_test(test_config());
-    app.record_patch_phrase_history(r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#);
+    app.record_patch_phrase_history(r#"{"patch":"Pads/Pad 1.fxp:"} l8cdef"#);
 
     let patch_history_path = cmrt_history::test_support::patch_phrase_store_path_for_test()
         .expect("config local dir should resolve in isolated test");
@@ -130,4 +127,27 @@ fn patch_phrase_store_flushes_only_when_requested() {
     assert_eq!(stored.history, vec!["l8cdef".to_string()]);
 
     std::fs::remove_dir_all(&tmp).ok();
+}
+
+/// 音色キーは表示名（空タグの `:` を落とした形）のまま。既存 favorites のキーと一致させるため。
+/// 旧キー・旧形式の行は音色を読めないので記録しない。
+#[test]
+fn record_patch_phrase_history_keys_by_display_name_and_skips_legacy_lines() {
+    let mut app = NotepadScreen::new_for_test(test_config());
+
+    app.record_patch_phrase_history(r#"{"patch":"Pads/Pad 1.fxp:"} l8cdef"#);
+    app.record_patch_phrase_history(r#"{"Surge XT patch":"Pads/Pad 1.fxp:"} l8efga"#);
+    app.record_patch_phrase_history(r#"{"patch":"Pads/Pad 1.fxp"} l8gab"#);
+
+    let keys = app
+        .patch_phrase_store
+        .patches
+        .keys()
+        .cloned()
+        .collect::<Vec<_>>();
+    assert_eq!(keys, ["Pads/Pad 1.fxp"]);
+    assert_eq!(
+        app.patch_phrase_store.patches["Pads/Pad 1.fxp"].history,
+        ["l8cdef"]
+    );
 }

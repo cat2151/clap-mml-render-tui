@@ -3,8 +3,7 @@ use super::*;
 #[test]
 fn extract_patch_phrase_reads_patch_name_and_phrase() {
     let result =
-        NotepadScreen::extract_patch_phrase(r#"{"Surge XT patch":"Pads/Pad 1.fxp"}  l8cdef"#)
-            .unwrap();
+        NotepadScreen::extract_patch_phrase(r#"{"patch":"Pads/Pad 1.fxp:"}  l8cdef"#).unwrap();
 
     assert_eq!(result.0, "Pads/Pad 1.fxp");
     assert_eq!(result.1, "l8cdef");
@@ -15,7 +14,7 @@ fn handle_patch_phrase_enter_inserts_preview_above_current_line_and_closes() {
     let mut app = NotepadScreen::new_for_test(test_config());
     app.editor.lines = vec![
         "top".to_string(),
-        r#"{"Surge XT patch":"Pads/Pad 1.fxp"} old"#.to_string(),
+        r#"{"patch":"Pads/Pad 1.fxp:"} old"#.to_string(),
     ];
     app.editor.cursor = 1;
     app.editor.list_state.select(Some(1));
@@ -35,21 +34,21 @@ fn handle_patch_phrase_enter_inserts_preview_above_current_line_and_closes() {
         app.editor.lines,
         vec![
             "top".to_string(),
-            r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string(),
-            r#"{"Surge XT patch":"Pads/Pad 1.fxp"} old"#.to_string()
+            r#"{"patch":"Pads/Pad 1.fxp:"} l8cdef"#.to_string(),
+            r#"{"patch":"Pads/Pad 1.fxp:"} old"#.to_string()
         ]
     );
     assert_eq!(app.editor.cursor, 1);
     assert!(matches!(
         &*app.playback.session.play_state().lock().unwrap(),
-        PlayState::Running(msg) if msg == r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#
+        PlayState::Running(msg) if msg == r#"{"patch":"Pads/Pad 1.fxp:"} l8cdef"#
     ));
 }
 
 #[test]
 fn handle_patch_phrase_space_replays_current_preview() {
     let mut app = NotepadScreen::new_for_test(test_config());
-    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} old"#.to_string()];
+    app.editor.lines = vec![r#"{"patch":"Pads/Pad 1.fxp:"} old"#.to_string()];
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         cmrt_history::PatchPhraseState {
@@ -63,7 +62,7 @@ fn handle_patch_phrase_space_replays_current_preview() {
 
     assert!(matches!(
         &*app.playback.session.play_state().lock().unwrap(),
-        PlayState::Running(msg) if msg == r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#
+        PlayState::Running(msg) if msg == r#"{"patch":"Pads/Pad 1.fxp:"} l8cdef"#
     ));
 }
 
@@ -86,7 +85,7 @@ fn handle_patch_phrase_i_from_history_requests_line_edit_with_preview_mml() {
     assert!(matches!(app.mode, Mode::Normal));
     assert_eq!(
         app.editor.lines,
-        vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()]
+        vec![r#"{"patch":"Pads/Pad 1.fxp:"} l8cdef"#.to_string()]
     );
 }
 
@@ -128,7 +127,7 @@ fn handle_patch_phrase_arrow_keys_switch_focus_and_preview() {
     assert!(matches!(app.patch_phrase.focus, PatchPhrasePane::Favorites));
     assert!(matches!(
         &*app.playback.session.play_state().lock().unwrap(),
-        PlayState::Running(msg) if msg == r#"{"Surge XT patch":"Pads/Pad 1.fxp"} o5g"#
+        PlayState::Running(msg) if msg == r#"{"patch":"Pads/Pad 1.fxp:"} o5g"#
     ));
 
     app.handle_patch_phrase(KeyCode::Left);
@@ -136,7 +135,7 @@ fn handle_patch_phrase_arrow_keys_switch_focus_and_preview() {
     assert!(matches!(app.patch_phrase.focus, PatchPhrasePane::History));
     assert!(matches!(
         &*app.playback.session.play_state().lock().unwrap(),
-        PlayState::Running(msg) if msg == r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#
+        PlayState::Running(msg) if msg == r#"{"patch":"Pads/Pad 1.fxp:"} l8cdef"#
     ));
 }
 
@@ -165,14 +164,14 @@ fn handle_patch_phrase_page_down_and_page_up_move_by_visible_page() {
     assert_eq!(app.patch_phrase.history_cursor, 3);
     assert!(matches!(
         &*app.playback.session.play_state().lock().unwrap(),
-        PlayState::Running(msg) if msg == r#"{"Surge XT patch":"Pads/Pad 1.fxp"} three"#
+        PlayState::Running(msg) if msg == r#"{"patch":"Pads/Pad 1.fxp:"} three"#
     ));
 
     app.handle_patch_phrase(KeyCode::PageUp);
     assert_eq!(app.patch_phrase.history_cursor, 1);
     assert!(matches!(
         &*app.playback.session.play_state().lock().unwrap(),
-        PlayState::Running(msg) if msg == r#"{"Surge XT patch":"Pads/Pad 1.fxp"} one"#
+        PlayState::Running(msg) if msg == r#"{"patch":"Pads/Pad 1.fxp:"} one"#
     ));
 }
 
@@ -198,9 +197,9 @@ fn handle_patch_phrase_j_prefetches_predicted_navigation_cache() {
     app.handle_patch_phrase(KeyCode::Char('j'));
 
     let cache = app.audio.cache.lock().unwrap();
-    assert!(cache.contains_key(r#"{"Surge XT patch":"Pads/Pad 1.fxp"} zero"#));
-    assert!(cache.contains_key(r#"{"Surge XT patch":"Pads/Pad 1.fxp"} two"#));
-    assert!(cache.contains_key(r#"{"Surge XT patch":"Pads/Pad 1.fxp"} three"#));
+    assert!(cache.contains_key(r#"{"patch":"Pads/Pad 1.fxp:"} zero"#));
+    assert!(cache.contains_key(r#"{"patch":"Pads/Pad 1.fxp:"} two"#));
+    assert!(cache.contains_key(r#"{"patch":"Pads/Pad 1.fxp:"} three"#));
 }
 
 #[test]
@@ -230,13 +229,13 @@ fn handle_patch_phrase_j_prefetches_direction_first_then_fills_remaining_navigat
             .map(String::as_str)
             .collect::<Vec<_>>(),
         vec![
-            r#"{"Surge XT patch":"Pads/Pad 1.fxp"} phrase 6"#,
-            r#"{"Surge XT patch":"Pads/Pad 1.fxp"} phrase 7"#,
-            r#"{"Surge XT patch":"Pads/Pad 1.fxp"} phrase 4"#,
-            r#"{"Surge XT patch":"Pads/Pad 1.fxp"} phrase 10"#,
-            r#"{"Surge XT patch":"Pads/Pad 1.fxp"} phrase 0"#,
-            r#"{"Surge XT patch":"Pads/Pad 1.fxp"} phrase 8"#,
-            r#"{"Surge XT patch":"Pads/Pad 1.fxp"} phrase 9"#,
+            r#"{"patch":"Pads/Pad 1.fxp:"} phrase 6"#,
+            r#"{"patch":"Pads/Pad 1.fxp:"} phrase 7"#,
+            r#"{"patch":"Pads/Pad 1.fxp:"} phrase 4"#,
+            r#"{"patch":"Pads/Pad 1.fxp:"} phrase 10"#,
+            r#"{"patch":"Pads/Pad 1.fxp:"} phrase 0"#,
+            r#"{"patch":"Pads/Pad 1.fxp:"} phrase 8"#,
+            r#"{"patch":"Pads/Pad 1.fxp:"} phrase 9"#,
         ]
     );
 }

@@ -245,8 +245,8 @@ fn track_init_mml(
     let mut json = Map::new();
     if let Some(patch) = patch {
         json.insert(
-            "Surge XT patch".to_string(),
-            Value::String(patch.to_string()),
+            cmrt_core::PATCH_JSON_KEY.to_string(),
+            Value::String(cmrt_core::wire_from_display(patch)),
         );
     }
     // 現行DAW rendererはこの値を解釈しないが、Grid固有値を落とさずセルへ保持する。

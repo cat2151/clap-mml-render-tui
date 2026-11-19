@@ -25,7 +25,7 @@ fn save_as_then_open_restores_grid_and_mixer_from_one_file() {
     let project_path = tmp.path().join("song.cmrt-daw.json");
     let (mut app, _cache_rx) = build_test_app();
     app.editor.data[0][0] = r#"{"beat":"4/4"}t132"#.to_string();
-    app.editor.data[2][0] = r#"{"Surge XT patch":"Piano"}"#.to_string();
+    app.editor.data[2][0] = r#"{"patch":"Piano:"}"#.to_string();
     app.editor.data[2][2] = "l8cdef".to_string();
     app.track_volumes_db[2] = -6;
 

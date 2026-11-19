@@ -57,7 +57,7 @@ fn overwrite(
     let lines = [first, second]
         .into_iter()
         .map(|events| {
-            let source = format!(r#"{{"Surge XT patch": "{}"}} c"#, setup.patch());
+            let source = format!(r#"{{"patch": "{}:"}} c"#, setup.patch());
             let mut live = live_line(&source).expect("行を作れない");
             live.program.performance.loop_seconds =
                 events.last().map_or(0.0, |event| event.seconds);

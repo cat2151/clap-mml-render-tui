@@ -134,7 +134,7 @@ fn commit_insert_keeps_semicolon_text_in_same_measure() {
 
         let (mut app, cache_rx) = build_test_app();
         app.editor.data[0][0] = r#"{"beat": "4/4"}t120"#.to_string();
-        app.editor.data[2][0] = r#"{"Surge XT patch": "piano"}"#.to_string();
+        app.editor.data[2][0] = r#"{"patch": "piano:"}"#.to_string();
         app.editor.data[3][1] = "existing".to_string();
 
         app.start_insert();
@@ -156,8 +156,8 @@ fn commit_insert_keeps_semicolon_text_in_same_measure() {
         let json: Value =
             serde_json::from_str(preprocessed.embedded_json.as_deref().unwrap()).unwrap();
         assert_eq!(
-            json.get("Surge XT patch").and_then(Value::as_str),
-            Some("piano"),
+            json.get("patch").and_then(Value::as_str),
+            Some("piano:"),
             "track timbre should be merged into the leading JSON: {}",
             job.mml
         );

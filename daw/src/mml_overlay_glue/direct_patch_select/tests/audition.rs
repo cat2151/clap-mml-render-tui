@@ -61,7 +61,7 @@ fn assert_both_auditions_play_the_measure(app: &mut DawApp, sink: &RecordingSink
 #[test]
 fn a_written_kick_measure_is_auditioned_as_the_whole_phrase() {
     let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
-    let (mut app, _cache_rx) = app_with_drum_catalog(r#"{"Surge XT patch": "Drums/Kick A.fxp"}"#);
+    let (mut app, _cache_rx) = app_with_drum_catalog(r#"{"patch": "Drums/Kick A.fxp:"}"#);
     app.editor.data[2][1] = "l8o2cccc".to_string();
     let sink = attach_recording_sink(&mut app);
 

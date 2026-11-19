@@ -150,8 +150,9 @@ impl DawApp {
         }
 
         let mut json_entries = vec![(GENERATE_FROM_CHORD_TRACK_KEY, WIZARD_DIRECTIVE)];
-        if let Some(patch_name) = patch_name.as_deref() {
-            json_entries.push((PATCH_JSON_KEY, patch_name));
+        let patch_wire = patch_name.as_deref().map(cmrt_core::wire_from_display);
+        if let Some(patch_wire) = patch_wire.as_deref() {
+            json_entries.push((PATCH_JSON_KEY, patch_wire));
         }
         let next_init =
             crate::mml::init_cell_with_json_entries(&self.editor.data[track][0], &json_entries);

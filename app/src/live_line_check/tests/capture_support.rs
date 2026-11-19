@@ -97,7 +97,7 @@ impl CaptureSetup {
         let check_lines = lines
             .iter()
             .map(|events| {
-                let source = format!(r#"{{"Surge XT patch": "{}"}} c"#, self.patch);
+                let source = format!(r#"{{"patch": "{}:"}} c"#, self.patch);
                 let mut live = live_line(&source).expect("行を作れない");
                 live.program.performance.loop_seconds =
                     events.last().map_or(0.0, |event| event.seconds);

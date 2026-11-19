@@ -1,6 +1,6 @@
 use super::*;
 
-const PAD: &str = r#"{"Surge XT patch": "Pads/Pad 1.fxp"}"#;
+const PAD: &str = r#"{"patch": "Pads/Pad 1.fxp:"}"#;
 
 #[test]
 fn strips_nothing_when_there_is_no_json() {
@@ -14,7 +14,7 @@ fn strips_the_leading_json_and_leaves_the_mml() {
 
 #[test]
 fn keeps_an_unfinished_json_as_mml() {
-    let text = r#"{"Surge XT patch": "Pads"#;
+    let text = r#"{"patch": "Pads:"#;
     assert_eq!(strip_patch_json(text), text);
 }
 
@@ -26,4 +26,13 @@ fn reads_the_patch_name_back() {
     );
     assert_eq!(patch_name("cde"), None);
     assert_eq!(patch_name(r#"{"other": 1} cde"#), None);
+}
+
+#[test]
+fn a_legacy_key_or_an_untagged_value_is_not_a_patch_name() {
+    assert_eq!(
+        patch_name(r#"{"Surge XT patch": "Pads/Pad 1.fxp:"} cde"#),
+        None
+    );
+    assert_eq!(patch_name(r#"{"patch": "Pads/Pad 1.fxp"} cde"#), None);
 }

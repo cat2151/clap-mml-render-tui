@@ -16,7 +16,7 @@ const BASS_PATCH: &str = "Bass/Snapshot Bass.fxp";
 const KEYS_PATCH: &str = "Pads/Snapshot Keys Pad.fxp";
 
 fn generated_init(patch: &str, directive: &str) -> String {
-    format!(r#"{{"Surge XT patch":"{patch}","generate from chord track":"{directive}"}}"#)
+    format!(r#"{{"patch":"{patch}:","generate from chord track":"{directive}"}}"#)
 }
 
 fn open_chord_overlay(

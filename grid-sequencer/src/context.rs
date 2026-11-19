@@ -43,6 +43,30 @@ impl GridSequencerContext<'_> {
         }
     }
 
+    /// catalog に音色を載せる plugin のプロファイル名。読み込み中・エラー時は空。
+    pub(crate) fn catalog_plugin_names(&self) -> Vec<String> {
+        match self.patch_load {
+            PatchLoadState::Ready(snapshot) => snapshot
+                .catalog_plugins()
+                .iter()
+                .map(|plugin| plugin.name.clone())
+                .collect(),
+            PatchLoadState::Loading | PatchLoadState::Err(_) => Vec::new(),
+        }
+    }
+
+    /// この音色を鳴らす plugin のプロファイル名。
+    pub(crate) fn patch_plugin_name(&self, patch: &str) -> Option<&str> {
+        match self.patch_load {
+            PatchLoadState::Ready(snapshot) => snapshot
+                .patch_plugins()
+                .for_patch(patch)
+                .ok()
+                .map(|plugin| plugin.name.as_str()),
+            PatchLoadState::Loading | PatchLoadState::Err(_) => None,
+        }
+    }
+
     pub(crate) fn patch_status(&self) -> GridPatchStatus {
         if !self.patch_dirs_configured {
             return GridPatchStatus::NotConfigured;

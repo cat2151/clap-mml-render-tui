@@ -37,7 +37,7 @@ fn slash_then_chars_filter_and_preview_the_first_result() {
     assert_eq!(selected(&app).as_deref(), Some("Tone 01"));
     assert_eq!(
         playing(&app).as_deref(),
-        Some(r#"{"Surge XT patch": "Tone 01"} l8cdef"#)
+        Some(r#"{"patch": "Tone 01:"} l8cdef"#)
     );
 }
 
@@ -88,7 +88,7 @@ fn opening_prefills_the_regex_with_the_line_filter_word() {
 
     open_patch_select_for_test(
         &mut app,
-        r#"{"Surge XT patch":"Tone 02","Surge XT patch filter":"0[12]"} l8cdef"#,
+        r#"{"patch":"Tone 02:","patch filter":"0[12]"} l8cdef"#,
         &["Tone 00", "Tone 01", "Tone 02"],
     );
 
@@ -104,7 +104,7 @@ fn an_invalid_line_filter_word_still_opens_with_an_empty_list() {
 
     open_patch_select_for_test(
         &mut app,
-        r#"{"Surge XT patch":"Tone 00","Surge XT patch filter":"["} l8cdef"#,
+        r#"{"patch":"Tone 00:","patch filter":"["} l8cdef"#,
         &["Tone 00", "Tone 01"],
     );
 

@@ -6,7 +6,7 @@
 //!
 //! ```text
 //! CMRT_TEST_RENDER_SERVER_EXE=<clap-mml-play-server>/target/release/clap-mml-render-server.exe
-//! CMRT_TEST_PARALLEL_RENDER_INIT_JSON={"Surge XT patch":"<音色>","effects after instrument":[{"TONE3000 preset":"Bogner Fullstack"}]}
+//! CMRT_TEST_PARALLEL_RENDER_INIT_JSON={"patch":"<音色>:","effects after instrument":[{"TONE3000 preset":"Bogner Fullstack"}]}
 //! cargo test -p cmrt-offline-render --release render_server::tests::parallel_effect_chain -- --ignored --nocapture
 //! ```
 //!

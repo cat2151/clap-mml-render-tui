@@ -13,7 +13,7 @@ use crate::{Mode, NotepadScreen, PatchLoadState, PlayState};
 
 const DEXED_SNARE: &str = "Drums.syx/01 Snare Tight";
 const SURGE_PAD: &str = "Pads/Pad 1.fxp";
-const EXISTING_CHAIN_LINE: &str = r#"{"Surge XT patch":"Pads/Pad 1.fxp","effects after instrument":[{"Dragonfly Hall Reverb preset":"Medium Clear Hall"}]} l8cdef"#;
+const EXISTING_CHAIN_LINE: &str = r#"{"patch":"Pads/Pad 1.fxp:","effects after instrument":[{"Dragonfly Hall Reverb preset":"Medium Clear Hall"}]} l8cdef"#;
 
 /// Dexed の snare（effect 無し）と Surge XT の pad（effect 内蔵）の 2 音色。
 fn dexed_and_surge_state() -> PatchLoadState {
@@ -120,7 +120,7 @@ fn chain(mml: &str) -> Option<Value> {
 fn confirming_a_dexed_snare_writes_the_drum_room_chain_that_the_preview_played() {
     let _history = HistoryDirGuard::isolated();
     let app = open_on(
-        &format!(r#"{{"Surge XT patch":"{SURGE_PAD}"}} l8cdef"#),
+        &format!(r#"{{"patch":"{SURGE_PAD}:"}} l8cdef"#),
         DEXED_SNARE,
     );
 
@@ -130,7 +130,7 @@ fn confirming_a_dexed_snare_writes_the_drum_room_chain_that_the_preview_played()
         chain(&line),
         Some(json!([{"Dragonfly Room Reverb preset": "Small Drum Room"}]))
     );
-    assert_eq!(head_json(&line)["Surge XT patch"], DEXED_SNARE);
+    assert_eq!(head_json(&line)["patch"], format!("{DEXED_SNARE}:"));
     assert_eq!(preview, line);
 }
 
@@ -138,7 +138,7 @@ fn confirming_a_dexed_snare_writes_the_drum_room_chain_that_the_preview_played()
 fn confirming_a_surge_patch_writes_no_chain() {
     let _history = HistoryDirGuard::isolated();
     let app = open_on(
-        &format!(r#"{{"Surge XT patch":"{DEXED_SNARE}"}} l8cdef"#),
+        &format!(r#"{{"patch":"{DEXED_SNARE}:"}} l8cdef"#),
         SURGE_PAD,
     );
 
@@ -161,7 +161,7 @@ fn a_reverb_without_the_record_is_marked_manual_and_kept() {
     let (preview, line) = preview_and_confirm(app);
 
     assert_eq!(chain(&line), original);
-    assert_eq!(head_json(&line)["Surge XT patch"], DEXED_SNARE);
+    assert_eq!(head_json(&line)["patch"], format!("{DEXED_SNARE}:"));
     assert_eq!(head_json(&line)["manual reverb"], json!(true));
     assert_eq!(preview, line);
 }
@@ -172,7 +172,7 @@ fn delay_and_auto_hall_line() -> String {
     format!(
         "{} l8cdef",
         json!({
-            "Surge XT patch": SURGE_PAD,
+            "patch": format!("{SURGE_PAD}:"),
             "effects after instrument": [{"Delay preset": "Echo"}, hall.clone()],
             "auto reverb": hall,
         })
@@ -218,7 +218,7 @@ fn saved_off_setting_writes_no_chain() {
     })
     .unwrap();
     let app = open_on(
-        &format!(r#"{{"Surge XT patch":"{SURGE_PAD}"}} l8cdef"#),
+        &format!(r#"{{"patch":"{SURGE_PAD}:"}} l8cdef"#),
         DEXED_SNARE,
     );
 
@@ -232,7 +232,7 @@ fn saved_off_setting_writes_no_chain() {
 fn e_saves_off_and_replays_the_same_patch_dry() {
     let _history = HistoryDirGuard::isolated();
     let mut app = open_on(
-        &format!(r#"{{"Surge XT patch":"{SURGE_PAD}"}} l8cdef"#),
+        &format!(r#"{{"patch":"{SURGE_PAD}:"}} l8cdef"#),
         DEXED_SNARE,
     );
     assert!(chain(&playing(&app)).is_some());
@@ -240,7 +240,10 @@ fn e_saves_off_and_replays_the_same_patch_dry() {
     press(&mut app, KeyCode::Char('e'), KeyModifiers::NONE);
 
     assert_eq!(chain(&playing(&app)), None);
-    assert_eq!(head_json(&playing(&app))["Surge XT patch"], DEXED_SNARE);
+    assert_eq!(
+        head_json(&playing(&app))["patch"],
+        format!("{DEXED_SNARE}:")
+    );
     let saved = cmrt_history::load_auto_reverb_settings().expect("saved by e");
     assert!(!saved.enabled);
 }
@@ -249,7 +252,7 @@ fn e_saves_off_and_replays_the_same_patch_dry() {
 fn the_rules_overlay_takes_the_keys_notepad_otherwise_handles_itself() {
     let _history = HistoryDirGuard::isolated();
     let mut app = open_on(
-        &format!(r#"{{"Surge XT patch":"{SURGE_PAD}"}} l8cdef"#),
+        &format!(r#"{{"patch":"{SURGE_PAD}:"}} l8cdef"#),
         DEXED_SNARE,
     );
 

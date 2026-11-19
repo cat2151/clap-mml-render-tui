@@ -16,7 +16,7 @@ fn tones(count: usize) -> Vec<String> {
 }
 
 fn tone_line(patch: &str) -> String {
-    format!(r#"{{"Surge XT patch":"{patch}"}} l8cdef"#)
+    format!(r#"{{"patch":"{patch}:"}} l8cdef"#)
 }
 
 fn open_tones(app: &mut NotepadScreen<'_>, count: usize, current: &str) {

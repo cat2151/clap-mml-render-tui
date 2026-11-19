@@ -32,7 +32,7 @@ fn handle_patch_phrase_slash_then_enter_keeps_filtered_results_for_j_navigation(
     assert_eq!(app.patch_phrase.history_cursor, 1);
     assert!(matches!(
         &*app.playback.session.play_state().lock().unwrap(),
-        PlayState::Running(msg) if msg == r#"{"Surge XT patch":"Pads/Pad 1.fxp"} gamma jk"#
+        PlayState::Running(msg) if msg == r#"{"patch":"Pads/Pad 1.fxp:"} gamma jk"#
     ));
 }
 

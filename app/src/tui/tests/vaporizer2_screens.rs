@@ -67,7 +67,7 @@ fn the_keyboard_screen_starts_on_a_vvp_patch() {
 fn a_vvp_patch_with_an_apostrophe_survives_the_mml_head_json() {
     let mut app = app_with_mixed_patches();
     app.notepad.set_session_lines_for_test(vec![
-        r#"{"Surge XT patch":"AT I'll House Your Grains.vvp"} c"#.to_string(),
+        r#"{"patch":"AT I'll House Your Grains.vvp:"} c"#.to_string()
     ]);
 
     app.start_keyboard_from_notepad();

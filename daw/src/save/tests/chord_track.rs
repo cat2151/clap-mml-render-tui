@@ -16,7 +16,7 @@ fn a_save_file_without_a_chord_row_is_rewritten_byte_for_byte() {
                  {"track":0,"description":"tempo track","meas":[
                    {"meas":0,"description":"initial","mml":"{\"beat\":\"4/4\"}t120"}]},
                  {"track":1,"volume_db":-6,"meas":[
-                   {"meas":0,"description":"initial","mml":"{\"Surge XT patch\": \"piano\"}"},
+                   {"meas":0,"description":"initial","mml":"{\"patch\": \"piano:\"}"},
                    {"meas":1,"mml":"cde"}]},
                  {"track":2,"meas":[{"meas":2,"mml":"gab"}]}
                ]}"#,

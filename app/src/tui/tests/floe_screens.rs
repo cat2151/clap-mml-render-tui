@@ -77,7 +77,7 @@ fn selecting_floe_requests_a_preview_and_keeps_the_display_string() {
 fn floe_display_string_survives_the_mml_head_json() {
     let mut app = app_with_floe_patch();
     app.notepad
-        .set_session_lines_for_test(vec![format!("{{\"Surge XT patch\":\"{FLOE_PATCH}\"}} c")]);
+        .set_session_lines_for_test(vec![format!("{{\"patch\":\"{FLOE_PATCH}:\"}} c")]);
 
     app.start_keyboard_from_notepad();
 

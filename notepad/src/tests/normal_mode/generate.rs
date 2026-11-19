@@ -19,8 +19,8 @@ fn handle_normal_g_inserts_generated_line_above_current_line_and_plays_it() {
     assert_eq!(app.editor.lines[2], "line 1");
     let inserted = &app.editor.lines[1];
     assert!(
-        inserted == r#"{"Surge XT patch": "Pads/Pad 1.fxp"} c1"#
-            || inserted == r#"{"Surge XT patch": "Pads/Pad 1.fxp"} cfg1"#,
+        inserted == r#"{"patch": "Pads/Pad 1.fxp:"} c1"#
+            || inserted == r#"{"patch": "Pads/Pad 1.fxp:"} cfg1"#,
         "inserted: {inserted}"
     );
     assert_eq!(
@@ -33,7 +33,7 @@ fn handle_normal_g_inserts_generated_line_above_current_line_and_plays_it() {
             .get("Pads/Pad 1.fxp")
             .map(|state| state.history.clone()),
         Some(vec![inserted
-            .strip_prefix(r#"{"Surge XT patch": "Pads/Pad 1.fxp"} "#)
+            .strip_prefix(r#"{"patch": "Pads/Pad 1.fxp:"} "#)
             .unwrap()
             .to_string()])
     );

@@ -235,6 +235,7 @@ fn session_state_round_trips_the_editable_grid() {
     let _env_guards = crate::test_support::set_local_dir_envs(&tmp);
     let grid = GridSequencerSessionState {
         fixed_chord: None,
+        zero_weight_plugins: Vec::new(),
         instances: vec![GridSequencerInstanceState {
             patch: Some("Keys/Piano.fxp".to_string()),
             lane_mode: GridLaneModeState::Single,

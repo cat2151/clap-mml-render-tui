@@ -31,6 +31,7 @@ mod patch_role;
 mod patch_selector;
 mod patch_send;
 mod playback_sync;
+mod plugin_weight;
 mod regenerate;
 mod screen;
 mod screen_runtime;
@@ -52,6 +53,7 @@ pub use history::{
 };
 pub(crate) use input::ListDirection;
 pub use patch_role::{candidates_for_purpose, row_patch_purpose, GridPatchPurpose};
+pub use plugin_weight::{PluginWeight, PluginWeights};
 pub use screen::{GridSequencerParts, GridSequencerScreen};
 pub use sender::{
     GridConnectionPhase, GridConnectionStatus, GridMidiSender, GridPatch, GridPreloadEstimate,
@@ -375,7 +377,13 @@ impl GridSequencerScreen {
             }
             KeyCode::Char('T') => {
                 let next = cmrt_realtime_play::next_live_instance_count(self.track_count());
-                self.resize_for_restart(next, ctx.patches());
+                let patches = ctx
+                    .patches()
+                    .iter()
+                    .filter(|(display, _)| self.drawable_patch(display, ctx))
+                    .cloned()
+                    .collect::<Vec<_>>();
+                self.resize_for_restart(next, &patches);
                 return GridSequencerAction::RestartWithTrackCount(next);
             }
             KeyCode::Char('?') => {
@@ -391,7 +399,7 @@ impl GridSequencerScreen {
                 self.select_previous_track()
             }
             KeyCode::Char('s') if key.modifiers.is_empty() => self.toggle_selected_track_solo(),
-            KeyCode::Char('a') => self.toggle_cycle_random_overlay(),
+            KeyCode::Char('a') => self.toggle_cycle_random_overlay(ctx.catalog_plugin_names()),
             KeyCode::Char('b') if key.modifiers.is_empty() => self.toggle_single_buffering(),
             KeyCode::Char('c') => self.toggle_chord_mode(now, ctx),
             KeyCode::Char('i') => self.open_chord_input(),

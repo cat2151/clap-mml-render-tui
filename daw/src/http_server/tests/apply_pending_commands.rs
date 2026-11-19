@@ -107,18 +107,17 @@ fn apply_pending_http_commands_updates_random_patch_init_cell() {
 
     let mut app = build_test_app(cfg);
     app.editor.data[2][0] =
-        r#"{"Surge XT patch":"Old/Lead 1.fxp","Surge XT patch filter":"pad","custom":"keep"}l1"#
-            .to_string();
+        r#"{"patch":"Old/Lead 1.fxp:","patch filter":"pad","custom":"keep"}l1"#.to_string();
     app.editor.data[2][1] = "l8cde".to_string();
     app.apply_pending_http_commands();
 
     assert_eq!(
         app.editor.data[2][0],
-        r#"{"Surge XT patch":"Pad/Pad 1.fxp","Surge XT patch filter":"pad","custom":"keep"}l1"#
+        r#"{"patch":"Pad/Pad 1.fxp:","patch filter":"pad","custom":"keep"}l1"#
     );
     assert_eq!(
         state.lock().unwrap().grid_snapshot[2][0],
-        r#"{"Surge XT patch":"Pad/Pad 1.fxp","Surge XT patch filter":"pad","custom":"keep"}l1"#
+        r#"{"patch":"Pad/Pad 1.fxp:","patch filter":"pad","custom":"keep"}l1"#
     );
     assert_eq!(response_rx.try_recv().unwrap(), Ok(()));
     assert!(app

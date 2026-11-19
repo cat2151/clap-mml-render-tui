@@ -33,12 +33,13 @@ pub fn default_config_content_with_app_settings(app_settings: &str) -> String {
         format!("{}\n", app_settings.trim_end())
     };
     let profile_blocks = format!(
-        "{}{}{}{}{}{}",
+        "{}{}{}{}{}{}{}",
         surge_xt_profile_block(),
         vaporizer2_profile_block(),
         floe_profile_block(),
         sforzando_profile_block(),
         tyrelln6_profile_block(),
+        zebralette3_profile_block(),
         other_plugin_profile_block()
     );
     format!(
@@ -48,7 +49,7 @@ pub fn default_config_content_with_app_settings(app_settings: &str) -> String {
 # 例 (Windows): plugin_path = 'C:\Program Files\Common Files\CLAP\Surge Synth Team\Surge XT.clap'
 # 例 (Linux):   plugin_path = '/usr/lib/clap/Surge XT.clap'
 # 例 (macOS):   plugin_path = '/Library/Audio/Plug-Ins/CLAP/Surge XT.clap'
-# 既定プラグインは Surge XT 固定です。Surge XT / Dexed / Vaporizer2 / Floe / Sforzando / TyrellN6 は
+# 既定プラグインは Surge XT 固定です。Surge XT / Dexed / Vaporizer2 / Floe / Sforzando / TyrellN6 / Zebralette3 は
 # 組み込みなので、標準の場所へインストールしてあれば plugin_path は記述不要です。
 # 標準値を変更するときだけ、ファイル末尾の [plugins.<名前>] に差分を書きます。
 #
@@ -178,6 +179,18 @@ fn tyrelln6_profile_block() -> String {
 #
 # [plugins.TyrellN6]
 # plugin_path = 'D:\my\clap\TyrellN6.clap'
+"#
+    .to_string()
+}
+
+fn zebralette3_profile_block() -> String {
+    r#"
+# Zebralette3 の音色置き場は registry の DataPath\Presets\Zebralette3 から自動で決まります（patches_dirs は無視します）。
+# 音色は '<パス>.h2p:z' と書きます（タグの無い '.h2p:' は TyrellN6）。
+# 【省略可】標準外の場所へ入れた Zebralette3 本体。
+#
+# [plugins.Zebralette3]
+# plugin_path = 'D:\my\clap\Zebralette3.clap'
 "#
     .to_string()
 }

@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn handle_patch_phrase_n_p_t_switch_to_corresponding_overlays() {
     let mut app = NotepadScreen::new_for_test(test_config());
-    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} old"#.to_string()];
+    app.editor.lines = vec![r#"{"patch":"Pads/Pad 1.fxp:"} old"#.to_string()];
     app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::ready(make_patches(&[
         "Pads/Pad 1.fxp",
         "Leads/Lead 1.fxp",

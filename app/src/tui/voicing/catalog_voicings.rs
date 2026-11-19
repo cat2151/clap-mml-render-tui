@@ -84,5 +84,5 @@ impl CatalogVoicings {
 }
 
 fn patch_file_path(plugin: &CatalogPlugin, patch: &str) -> PathBuf {
-    PathBuf::from(plugin.base.resolve(patch))
+    PathBuf::from(plugin.base.resolve(cmrt_core::split_display(patch).0))
 }

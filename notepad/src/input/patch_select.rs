@@ -131,8 +131,8 @@ impl<'a> NotepadScreen<'a> {
         filter_query: Option<&str>,
         effects: &Map<String, Value>,
     ) -> String {
-        let patch_name =
-            serde_json::to_string(patch_name).unwrap_or_else(|_| format!("\"{}\"", patch_name));
+        let wire = cmrt_core::wire_from_display(patch_name);
+        let patch_name = serde_json::to_string(&wire).unwrap_or_else(|_| format!("\"{wire}\""));
         let mut json = format!(r#"{{"{PATCH_JSON_KEY}": {patch_name}"#);
         if let Some(filter_query) = filter_query
             .map(str::trim)

@@ -49,10 +49,10 @@ fn cache_render_extracts_patch_from_embedded_json() {
         ..Default::default()
     };
 
-    let patch = extract_patch_from_json(Some(r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#), &config);
+    let patch = extract_patch_path("Pads/Pad 1.fxp", &config);
 
     let expected = patches_dir.join("Pads").join("Pad 1.fxp");
-    assert_eq!(patch.as_deref(), Some(expected.to_string_lossy().as_ref()));
+    assert_eq!(patch, expected.to_string_lossy());
 }
 
 #[test]
@@ -68,7 +68,7 @@ fn cache_render_returns_none_when_json_patch_is_missing() {
         ..Default::default()
     };
 
-    let patch = extract_patch_from_json(Some(r#"{"tempo":120}"#), &config);
+    let patch = resolve_patch_wire_from_json(&serde_json::json!({"tempo": 120}), &config);
 
     assert_eq!(patch, None);
 }
@@ -98,12 +98,9 @@ fn cache_render_extracts_patch_from_embedded_json_with_factory_prefix_fallback()
         ..Default::default()
     };
 
-    let patch = extract_patch_from_json(Some(r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#), &config);
+    let patch = extract_patch_path("Pads/Pad 1.fxp", &config);
 
-    assert_eq!(
-        patch.as_deref(),
-        Some(factory_patch.to_string_lossy().as_ref())
-    );
+    assert_eq!(patch, factory_patch.to_string_lossy());
     std::fs::remove_dir_all(root).ok();
 }
 
@@ -132,7 +129,7 @@ fn mml_with_resolved_embedded_patch_keeps_core_patch_value_relative_to_base() {
     };
 
     let rewritten =
-        mml_with_resolved_embedded_patch(r#"{"Surge XT patch":"Pads/Pad 1.fxp"}t120o4c"#, &config);
+        mml_with_resolved_embedded_patch(r#"{"patch":"Pads/Pad 1.fxp:"}t120o4c"#, &config);
     let preprocessed = mml_preprocessor::extract_embedded_json(rewritten.as_ref());
     let value: serde_json::Value =
         serde_json::from_str(preprocessed.embedded_json.as_deref().unwrap()).unwrap();
@@ -140,17 +137,18 @@ fn mml_with_resolved_embedded_patch_keeps_core_patch_value_relative_to_base() {
         .join("Pads")
         .join("Pad 1.fxp")
         .to_string_lossy()
-        .into_owned();
+        .into_owned()
+        + ":";
 
     assert_eq!(
-        value.get("Surge XT patch").and_then(|patch| patch.as_str()),
+        value.get("patch").and_then(|patch| patch.as_str()),
         Some(expected_patch.as_str())
     );
     assert_eq!(preprocessed.remaining_mml, "t120o4c");
     std::fs::remove_dir_all(root).ok();
 }
 
-/// 音色の書き換えは `"Surge XT patch"` だけを触り、effect chain などの他のキーは残す。
+/// 音色の書き換えは `"patch"` だけを触り、effect chain などの他のキーは残す。
 #[test]
 fn mml_with_resolved_embedded_patch_keeps_the_effect_chain() {
     let config = CoreConfig {
@@ -167,9 +165,7 @@ fn mml_with_resolved_embedded_patch_keeps_the_effect_chain() {
         { "TONE3000 preset": "Bogner Fullstack" },
         { "Surge XT Effects preset": "Reverb 1/Cathedral 2.srgfx" }
     ]);
-    let mml = format!(
-        r#"{{"Surge XT patch":"Pads/Pad 1.fxp","{EFFECT_CHAIN_JSON_KEY}":{chain}}}t120o4c"#
-    );
+    let mml = format!(r#"{{"patch":"Pads/Pad 1.fxp:","{EFFECT_CHAIN_JSON_KEY}":{chain}}}t120o4c"#);
 
     let rewritten = mml_with_resolved_embedded_patch(&mml, &config);
     let preprocessed = mml_preprocessor::extract_embedded_json(rewritten.as_ref());
@@ -177,7 +173,7 @@ fn mml_with_resolved_embedded_patch_keeps_the_effect_chain() {
         serde_json::from_str(preprocessed.embedded_json.as_deref().unwrap()).unwrap();
 
     assert_eq!(value.get(EFFECT_CHAIN_JSON_KEY), Some(&chain));
-    assert!(value.get("Surge XT patch").is_some());
+    assert!(value.get("patch").is_some());
     assert_eq!(preprocessed.remaining_mml, "t120o4c");
 }
 
@@ -189,12 +185,16 @@ fn mml_with_resolved_embedded_patch_keeps_the_effect_chain() {
 #[test]
 fn embedded_patch_ref_returns_the_unresolved_display_string() {
     assert_eq!(
-        embedded_patch_ref(r#"{"Surge XT patch":"Dexed_01.syx/00 Say Again."}cde"#).as_deref(),
-        Some("Dexed_01.syx/00 Say Again.")
+        embedded_patch_ref(r#"{"patch":"Dexed_01.syx/00 Say Again.:"}cde"#)
+            .unwrap()
+            .as_deref(),
+        Some("Dexed_01.syx/00 Say Again.:")
     );
     assert_eq!(
-        embedded_patch_ref(r#"{"Surge XT patch":"Pads/Pad 1.fxp"}t120o4c"#).as_deref(),
-        Some("Pads/Pad 1.fxp")
+        embedded_patch_ref(r#"{"patch":"Pads/Pad 1.fxp:"}t120o4c"#)
+            .unwrap()
+            .as_deref(),
+        Some("Pads/Pad 1.fxp:")
     );
 }
 
@@ -202,6 +202,23 @@ fn embedded_patch_ref_returns_the_unresolved_display_string() {
 /// 「既定プラグイン」として扱う（`docs/adr/0004-default-plugin-owns-unspecified-patches.md`）。
 #[test]
 fn embedded_patch_ref_is_none_without_a_patch_key() {
-    assert_eq!(embedded_patch_ref("cde"), None);
-    assert_eq!(embedded_patch_ref(r#"{"tempo":120}cde"#), None);
+    assert_eq!(embedded_patch_ref("cde").unwrap(), None);
+    assert_eq!(embedded_patch_ref(r#"{"tempo":120}cde"#).unwrap(), None);
+}
+
+/// 書き換えはパス部分だけで、タグは残す。旧キー・旧形式は書き換えず、受け取った server のエラーに任せる。
+#[test]
+fn mml_with_resolved_embedded_patch_keeps_the_tag_and_leaves_legacy_patches_alone() {
+    let config = CoreConfig {
+        patch_base: Some("/patches".into()).into(),
+        ..Default::default()
+    };
+    let rewritten = mml_with_resolved_embedded_patch(r#"{"patch":"Pads/Pad 1.fxp:"}c"#, &config);
+    assert!(rewritten.contains(r#".fxp:"}c"#), "{rewritten}");
+    for legacy in [
+        r#"{"Surge XT patch":"Pads/Pad 1.fxp:"}c"#,
+        r#"{"patch":"Pads/Pad 1.fxp"}c"#,
+    ] {
+        assert_eq!(mml_with_resolved_embedded_patch(legacy, &config), legacy);
+    }
 }

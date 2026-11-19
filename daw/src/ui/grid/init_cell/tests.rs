@@ -17,7 +17,7 @@ fn snapshot_with(displays: &[&str]) -> PatchCatalogSnapshot {
 }
 
 fn patch_cell(display: &str) -> String {
-    format!(r#"{{"Surge XT patch": "{display}"}}"#)
+    format!(r#"{{"patch": "{display}:"}}"#)
 }
 
 #[test]
@@ -106,7 +106,7 @@ const GENERATED_TRACK: usize = crate::FIRST_PLAYABLE_TRACK;
 
 /// 音色と「chord 行から生成する」指定の両方が入った init セル。
 fn generated_patch_cell(display: &str, directive: &str) -> String {
-    format!(r#"{{"Surge XT patch": "{display}", "generate from chord track": "{directive}"}}"#)
+    format!(r#"{{"patch": "{display}:", "generate from chord track": "{directive}"}}"#)
 }
 
 #[test]

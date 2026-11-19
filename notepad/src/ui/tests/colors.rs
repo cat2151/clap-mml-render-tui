@@ -77,7 +77,7 @@ fn assert_highlighted_row(cursor: usize) {
     let mut app = NotepadScreen::new_for_test(test_config());
     app.editor.lines = vec![
         "t".to_string(),
-        r#"{"Surge XT patch": "Pads/Warm.fxp"} t120 c"#.to_string(),
+        r#"{"patch": "Pads/Warm.fxp:"} t120 c"#.to_string(),
     ];
     app.editor.cursor = cursor;
     app.editor.list_state.select(Some(cursor));

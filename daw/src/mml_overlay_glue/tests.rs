@@ -109,7 +109,7 @@ fn the_init_column_does_not_open_the_overlay() {
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_track = 2;
     app.editor.cursor_measure = 0;
-    app.editor.data[2][0] = r#"{"Surge XT patch": "Bass/Snapshot Bass.fxp"}"#.to_string();
+    app.editor.data[2][0] = r#"{"patch": "Bass/Snapshot Bass.fxp:"}"#.to_string();
 
     assert!(!app.try_open_mml_overlay(ctrl('p')));
 
@@ -156,8 +156,8 @@ fn the_overlay_opens_with_the_patch_of_the_cursor_track() {
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_track = 3;
     app.editor.cursor_measure = 1;
-    app.editor.data[2][0] = r#"{"Surge XT patch": "Pads/Snapshot Pad.fxp"}"#.to_string();
-    app.editor.data[3][0] = r#"{"Surge XT patch": "Bass/Snapshot Bass.fxp"}"#.to_string();
+    app.editor.data[2][0] = r#"{"patch": "Pads/Snapshot Pad.fxp:"}"#.to_string();
+    app.editor.data[3][0] = r#"{"patch": "Bass/Snapshot Bass.fxp:"}"#.to_string();
 
     assert!(app.try_open_mml_overlay(ctrl('p')));
 

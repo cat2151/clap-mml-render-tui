@@ -9,7 +9,7 @@ fn colored(line: &str) -> Vec<(&str, SyntaxKind)> {
 
 #[test]
 fn segments_cover_the_whole_line_in_order() {
-    let line = r#"{"Surge XT patch": "Pads/Pad 1.fxp"} l8c+d'eg'r"#;
+    let line = r#"{"patch": "Pads/Pad 1.fxp:"} l8c+d'eg'r"#;
     let segments = highlight(line);
     let mut pos = 0;
     for (range, _) in &segments {
@@ -21,26 +21,26 @@ fn segments_cover_the_whole_line_in_order() {
 
 #[test]
 fn patch_name_is_split_into_stem_and_the_rest() {
-    let line = r#"{"Surge XT patch": "Pads/Pad 1.fxp"} r"#;
+    let line = r#"{"patch": "Pads/Pad 1.fxp:"} r"#;
     assert_eq!(
         colored(line),
         vec![
             ("\"Pads/", SyntaxKind::PatchPath),
             ("Pad 1", SyntaxKind::PatchStem),
-            (".fxp\"", SyntaxKind::PatchPath),
+            (".fxp:\"", SyntaxKind::PatchPath),
         ]
     );
 }
 
 #[test]
 fn filter_query_is_not_colored_as_patch_name() {
-    let line = r#"{"Surge XT patch": "Pad 1.fxp", "Surge XT patch filter": "pad"} r"#;
+    let line = r#"{"patch": "Pad 1.fxp:", "patch filter": "pad"} r"#;
     assert_eq!(
         colored(line),
         vec![
             ("\"", SyntaxKind::PatchPath),
             ("Pad 1", SyntaxKind::PatchStem),
-            (".fxp\"", SyntaxKind::PatchPath),
+            (".fxp:\"", SyntaxKind::PatchPath),
         ]
     );
 }
@@ -48,7 +48,7 @@ fn filter_query_is_not_colored_as_patch_name() {
 #[test]
 fn effect_preset_names_in_chain_and_auto_reverb_are_colored() {
     let line = format!(
-        r#"{{"Surge XT patch": "P.fxp", "{EFFECT_CHAIN_JSON_KEY}": [{{"Dragonfly Room Reverb preset": "Small Drum Room", "bypass": true}}], "{AUTO_REVERB_JSON_KEY}": {{"Dragonfly Room Reverb preset": "Small Drum Room"}}}} r"#
+        r#"{{"patch": "P.fxp:", "{EFFECT_CHAIN_JSON_KEY}": [{{"Dragonfly Room Reverb preset": "Small Drum Room", "bypass": true}}], "{AUTO_REVERB_JSON_KEY}": {{"Dragonfly Room Reverb preset": "Small Drum Room"}}}} r"#
     );
     let presets: Vec<&str> = colored(&line)
         .into_iter()
@@ -60,7 +60,7 @@ fn effect_preset_names_in_chain_and_auto_reverb_are_colored() {
 
 #[test]
 fn only_note_names_in_the_mml_body_are_colored() {
-    let line = r#"{"Surge XT patch": "abc.fxp"} t120 o4 l8 c+4. r 'eg' b"#;
+    let line = r#"{"patch": "abc.fxp:"} t120 o4 l8 c+4. r 'eg' b"#;
     let notes: Vec<&str> = colored(line)
         .into_iter()
         .filter(|(_, kind)| *kind == SyntaxKind::NoteName)

@@ -22,14 +22,14 @@ fn handle_normal_r_inserts_random_patch_at_start_of_plain_line() {
     assert!(matches!(result, NormalAction::Continue));
     assert_eq!(
         app.editor.lines,
-        vec![r#"{"Surge XT patch": "Pads/Pad 1.fxp"} cde"#.to_string()]
+        vec![r#"{"patch": "Pads/Pad 1.fxp:"} cde"#.to_string()]
     );
 }
 
 #[test]
 fn handle_normal_r_replaces_existing_patch_at_start_of_current_line() {
     let mut app = NotepadScreen::new_for_test(test_config());
-    app.editor.lines = vec![r#"{"Surge XT patch":"Old/Pad.fxp"} cde"#.to_string()];
+    app.editor.lines = vec![r#"{"patch":"Old/Pad.fxp:"} cde"#.to_string()];
     app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::ready(make_patches(&[
         "Leads/Lead 1.fxp",
     ]))));
@@ -39,18 +39,18 @@ fn handle_normal_r_replaces_existing_patch_at_start_of_current_line() {
     assert!(matches!(result, NormalAction::Continue));
     assert_eq!(
         app.editor.lines,
-        vec![r#"{"Surge XT patch": "Leads/Lead 1.fxp"} cde"#.to_string()]
+        vec![r#"{"patch": "Leads/Lead 1.fxp:"} cde"#.to_string()]
     );
     assert!(matches!(
         &*app.playback.session.play_state().lock().unwrap(),
-        PlayState::Running(msg) if msg == r#"{"Surge XT patch": "Leads/Lead 1.fxp"} cde"#
+        PlayState::Running(msg) if msg == r#"{"patch": "Leads/Lead 1.fxp:"} cde"#
     ));
 }
 
 #[test]
 fn handle_normal_r_uses_current_patch_category_when_filter_is_missing() {
     let mut app = NotepadScreen::new_for_test(test_config());
-    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} cde"#.to_string()];
+    app.editor.lines = vec![r#"{"patch":"Pads/Pad 1.fxp:"} cde"#.to_string()];
     app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::ready(make_patches(&[
         "Pads/Pad 1.fxp",
         "Pads/Pad 2.fxp",
@@ -60,18 +60,18 @@ fn handle_normal_r_uses_current_patch_category_when_filter_is_missing() {
     app.handle_normal(KeyCode::Char('r'));
 
     let patch_json = extract_line_patch_json(&app.editor.lines[0]);
-    let selected_patch = patch_json["Surge XT patch"].as_str().unwrap();
+    let selected_patch = patch_json["patch"].as_str().unwrap();
     assert!(
-        matches!(selected_patch, "Pads/Pad 1.fxp" | "Pads/Pad 2.fxp"),
+        matches!(selected_patch, "Pads/Pad 1.fxp:" | "Pads/Pad 2.fxp:"),
         "selected patch should stay in current category: {selected_patch}"
     );
-    assert_eq!(patch_json["Surge XT patch filter"], "pads");
+    assert_eq!(patch_json["patch filter"], "pads");
     assert!(matches!(
         &*app.playback.session.play_state().lock().unwrap(),
         PlayState::Running(msg)
             if matches!(
-                extract_line_patch_json(msg)["Surge XT patch"].as_str(),
-                Some("Pads/Pad 1.fxp" | "Pads/Pad 2.fxp")
+                extract_line_patch_json(msg)["patch"].as_str(),
+                Some("Pads/Pad 1.fxp:" | "Pads/Pad 2.fxp:")
             )
     ));
 }
@@ -79,9 +79,8 @@ fn handle_normal_r_uses_current_patch_category_when_filter_is_missing() {
 #[test]
 fn handle_normal_r_prioritizes_saved_patch_filter_over_current_patch_category() {
     let mut app = NotepadScreen::new_for_test(test_config());
-    app.editor.lines = vec![
-        r#"{"Surge XT patch":"Leads/Lead 1.fxp","Surge XT patch filter":"pads"} cde"#.to_string(),
-    ];
+    app.editor.lines =
+        vec![r#"{"patch":"Leads/Lead 1.fxp:","patch filter":"pads"} cde"#.to_string()];
     app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::ready(make_patches(&[
         "Pads/Pad 1.fxp",
         "Pads/Pad 2.fxp",
@@ -91,12 +90,12 @@ fn handle_normal_r_prioritizes_saved_patch_filter_over_current_patch_category() 
     app.handle_normal(KeyCode::Char('r'));
 
     let patch_json = extract_line_patch_json(&app.editor.lines[0]);
-    let selected_patch = patch_json["Surge XT patch"].as_str().unwrap();
+    let selected_patch = patch_json["patch"].as_str().unwrap();
     assert!(
-        matches!(selected_patch, "Pads/Pad 1.fxp" | "Pads/Pad 2.fxp"),
+        matches!(selected_patch, "Pads/Pad 1.fxp:" | "Pads/Pad 2.fxp:"),
         "selected patch should respect saved filter: {selected_patch}"
     );
-    assert_eq!(patch_json["Surge XT patch filter"], "pads");
+    assert_eq!(patch_json["patch filter"], "pads");
     assert!(app.editor.lines[0].ends_with(" cde"));
 }
 
@@ -107,15 +106,13 @@ fn handle_normal_r_does_not_repeat_within_the_same_filter_cycle() {
         .map(|i| format!("Pads/Pad {i}.fxp"))
         .collect::<Vec<_>>();
     let patch_refs = patch_names.iter().map(String::as_str).collect::<Vec<_>>();
-    app.editor.lines = vec![
-        r#"{"Surge XT patch":"Pads/Pad 1.fxp","Surge XT patch filter":"pad"} cde"#.to_string(),
-    ];
+    app.editor.lines = vec![r#"{"patch":"Pads/Pad 1.fxp:","patch filter":"pad"} cde"#.to_string()];
     app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::ready(make_patches(&patch_refs))));
 
     let mut seen = HashSet::new();
     for _ in 0..160 {
         app.handle_normal(KeyCode::Char('r'));
-        let selected_patch = extract_line_patch_json(&app.editor.lines[0])["Surge XT patch"]
+        let selected_patch = extract_line_patch_json(&app.editor.lines[0])["patch"]
             .as_str()
             .expect("selected patch should be stored as string")
             .to_string();
@@ -131,9 +128,7 @@ fn handle_normal_r_does_not_repeat_within_the_same_filter_cycle() {
 #[test]
 fn handle_normal_r_drops_saved_filter_when_it_matches_no_patch() {
     let mut app = NotepadScreen::new_for_test(test_config());
-    app.editor.lines = vec![
-        r#"{"Surge XT patch":"Lead 1.fxp","Surge XT patch filter":"missing"} cde"#.to_string(),
-    ];
+    app.editor.lines = vec![r#"{"patch":"Lead 1.fxp:","patch filter":"missing"} cde"#.to_string()];
     app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::ready(make_patches(&[
         "Pads/Pad 1.fxp",
         "Lead 1.fxp",
@@ -143,11 +138,11 @@ fn handle_normal_r_drops_saved_filter_when_it_matches_no_patch() {
 
     let patch_json = extract_line_patch_json(&app.editor.lines[0]);
     assert!(matches!(
-        patch_json["Surge XT patch"].as_str(),
-        Some("Pads/Pad 1.fxp" | "Lead 1.fxp")
+        patch_json["patch"].as_str(),
+        Some("Pads/Pad 1.fxp:" | "Lead 1.fxp:")
     ));
     assert!(
-        patch_json.get("Surge XT patch filter").is_none(),
+        patch_json.get("patch filter").is_none(),
         "invalid saved filter should be dropped: {patch_json}"
     );
 }
@@ -163,35 +158,30 @@ fn handle_normal_r_keeps_independent_history_per_filter_query() {
         "Bass/Bass 2.fxp",
     ]))));
 
-    app.editor.lines = vec![
-        r#"{"Surge XT patch":"Pads/Pad 1.fxp","Surge XT patch filter":"pad"} cde"#.to_string(),
-    ];
+    app.editor.lines = vec![r#"{"patch":"Pads/Pad 1.fxp:","patch filter":"pad"} cde"#.to_string()];
     app.handle_normal(KeyCode::Char('r'));
-    let pad_first = extract_line_patch_json(&app.editor.lines[0])["Surge XT patch"]
+    let pad_first = extract_line_patch_json(&app.editor.lines[0])["patch"]
         .as_str()
         .unwrap()
         .to_string();
 
-    app.editor.lines[0] =
-        r#"{"Surge XT patch":"Bass/Bass 1.fxp","Surge XT patch filter":"bass"} cde"#.to_string();
+    app.editor.lines[0] = r#"{"patch":"Bass/Bass 1.fxp:","patch filter":"bass"} cde"#.to_string();
     app.handle_normal(KeyCode::Char('r'));
-    let bass_first = extract_line_patch_json(&app.editor.lines[0])["Surge XT patch"]
+    let bass_first = extract_line_patch_json(&app.editor.lines[0])["patch"]
         .as_str()
         .unwrap()
         .to_string();
 
-    app.editor.lines[0] =
-        format!(r#"{{"Surge XT patch":"{pad_first}","Surge XT patch filter":"pad"}} cde"#);
+    app.editor.lines[0] = format!(r#"{{"patch":"{pad_first}:","patch filter":"pad"}} cde"#);
     app.handle_normal(KeyCode::Char('r'));
-    let pad_second = extract_line_patch_json(&app.editor.lines[0])["Surge XT patch"]
+    let pad_second = extract_line_patch_json(&app.editor.lines[0])["patch"]
         .as_str()
         .unwrap()
         .to_string();
 
-    app.editor.lines[0] =
-        format!(r#"{{"Surge XT patch":"{bass_first}","Surge XT patch filter":"bass"}} cde"#);
+    app.editor.lines[0] = format!(r#"{{"patch":"{bass_first}:","patch filter":"bass"}} cde"#);
     app.handle_normal(KeyCode::Char('r'));
-    let bass_second = extract_line_patch_json(&app.editor.lines[0])["Surge XT patch"]
+    let bass_second = extract_line_patch_json(&app.editor.lines[0])["patch"]
         .as_str()
         .unwrap()
         .to_string();
@@ -203,7 +193,7 @@ fn handle_normal_r_keeps_independent_history_per_filter_query() {
 #[test]
 fn handle_normal_r_reapplies_same_patch_to_each_semicolon_branch() {
     let mut app = NotepadScreen::new_for_test(test_config());
-    app.editor.lines = vec![r#"{"Surge XT patch":"Old/Pad.fxp"} c;f"#.to_string()];
+    app.editor.lines = vec![r#"{"patch":"Old/Pad.fxp:"} c;f"#.to_string()];
     app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::ready(make_patches(&[
         "Leads/Lead 1.fxp",
     ]))));
@@ -213,19 +203,15 @@ fn handle_normal_r_reapplies_same_patch_to_each_semicolon_branch() {
     assert!(matches!(result, NormalAction::Continue));
     assert_eq!(
         app.editor.lines,
-        vec![
-            r#"{"Surge XT patch": "Leads/Lead 1.fxp"} c;{"Surge XT patch": "Leads/Lead 1.fxp"} f"#
-                .to_string()
-        ]
+        vec![r#"{"patch": "Leads/Lead 1.fxp:"} c;{"patch": "Leads/Lead 1.fxp:"} f"#.to_string()]
     );
 }
 
 #[test]
 fn handle_normal_r_replaces_spaced_semicolon_branch_patch_without_duplication() {
     let mut app = NotepadScreen::new_for_test(test_config());
-    app.editor.lines = vec![
-        r#"{"Surge XT patch":"Old/Pad.fxp"} c; {"Surge XT patch":"Older/Lead.fxp"} f"#.to_string(),
-    ];
+    app.editor.lines =
+        vec![r#"{"patch":"Old/Pad.fxp:"} c; {"patch":"Older/Lead.fxp:"} f"#.to_string()];
     app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::ready(make_patches(&[
         "Leads/Lead 1.fxp",
     ]))));
@@ -235,10 +221,7 @@ fn handle_normal_r_replaces_spaced_semicolon_branch_patch_without_duplication() 
     assert!(matches!(result, NormalAction::Continue));
     assert_eq!(
         app.editor.lines,
-        vec![
-            r#"{"Surge XT patch": "Leads/Lead 1.fxp"} c;{"Surge XT patch": "Leads/Lead 1.fxp"} f"#
-                .to_string()
-        ]
+        vec![r#"{"patch": "Leads/Lead 1.fxp:"} c;{"patch": "Leads/Lead 1.fxp:"} f"#.to_string()]
     );
 }
 
@@ -255,11 +238,11 @@ fn handle_normal_r_inserts_c_for_empty_line_before_playing() {
     assert!(matches!(result, NormalAction::Continue));
     assert_eq!(
         app.editor.lines,
-        vec![r#"{"Surge XT patch": "Pads/Pad 1.fxp"} c"#.to_string()]
+        vec![r#"{"patch": "Pads/Pad 1.fxp:"} c"#.to_string()]
     );
     assert!(matches!(
         &*app.playback.session.play_state().lock().unwrap(),
-        PlayState::Running(msg) if msg == r#"{"Surge XT patch": "Pads/Pad 1.fxp"} c"#
+        PlayState::Running(msg) if msg == r#"{"patch": "Pads/Pad 1.fxp:"} c"#
     ));
 }
 
@@ -276,10 +259,10 @@ fn handle_normal_r_inserts_c_when_all_semicolon_branches_are_empty() {
     assert!(matches!(result, NormalAction::Continue));
     assert_eq!(
         app.editor.lines,
-        vec![r#"{"Surge XT patch": "Pads/Pad 1.fxp"} c"#.to_string()]
+        vec![r#"{"patch": "Pads/Pad 1.fxp:"} c"#.to_string()]
     );
     assert!(matches!(
         &*app.playback.session.play_state().lock().unwrap(),
-        PlayState::Running(msg) if msg == r#"{"Surge XT patch": "Pads/Pad 1.fxp"} c"#
+        PlayState::Running(msg) if msg == r#"{"patch": "Pads/Pad 1.fxp:"} c"#
     ));
 }

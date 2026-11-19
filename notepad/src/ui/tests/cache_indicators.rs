@@ -4,13 +4,13 @@ use super::*;
 fn normal_screen_shows_running_renders_in_purple() {
     let mut app = NotepadScreen::new_for_test(test_config());
     app.test_set_render_job_status(
-        r#"{"Surge XT patch":"Brass/Brass 1.fxp"} c"#,
+        r#"{"patch":"Brass/Brass 1.fxp:"} c"#,
         Some(crate::TuiRenderJobStatus::Running {
             elapsed: std::time::Duration::ZERO,
         }),
     );
     app.test_set_render_job_status(
-        r#"{"Surge XT patch":"sfz/Guitar/04-Guitar.sfz"} c"#,
+        r#"{"patch":"sfz/Guitar/04-Guitar.sfz:"} c"#,
         Some(crate::TuiRenderJobStatus::Pending),
     );
 

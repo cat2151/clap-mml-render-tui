@@ -26,7 +26,7 @@ fn growing_adds_columns_to_every_row_and_the_cache() {
 fn growing_copies_the_last_measure_of_each_playable_track_into_the_new_ones() {
     let (_temp, _env_guard) = temp_local_dirs("daw_cache");
     let (mut app, cache_rx) = build_test_app();
-    app.editor.data[FIRST_PLAYABLE_TRACK][0] = r#"{"Surge XT patch": "Kick.fxp"}"#.to_string();
+    app.editor.data[FIRST_PLAYABLE_TRACK][0] = r#"{"patch": "Kick.fxp:"}"#.to_string();
     app.editor.data[FIRST_PLAYABLE_TRACK][1] = "c8c8".to_string();
     app.editor.data[FIRST_PLAYABLE_TRACK][2] = "c4".to_string();
 

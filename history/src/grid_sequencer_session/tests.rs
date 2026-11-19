@@ -15,6 +15,7 @@ fn kinds(values: &[GridNoteStepState]) -> String {
 fn new_format_round_trip_preserves_grid_values_and_omits_legacy_fields() {
     let state = GridSequencerSessionState {
         fixed_chord: None,
+        zero_weight_plugins: Vec::new(),
         instances: vec![GridSequencerInstanceState {
             patch: Some("Keys/Piano.fxp".to_string()),
             lane_mode: GridLaneModeState::Single,
@@ -60,6 +61,7 @@ fn new_format_round_trip_preserves_grid_values_and_omits_legacy_fields() {
 fn downward_voicing_rotation_round_trips_as_a_negative_value() {
     let state = GridSequencerSessionState {
         fixed_chord: None,
+        zero_weight_plugins: Vec::new(),
         instances: vec![GridSequencerInstanceState {
             patch: Some("Bass/Poly.fxp".to_string()),
             lane_mode: GridLaneModeState::ChordVoices4,
@@ -291,4 +293,19 @@ fn the_legacy_hold_migration_turns_swing_off() {
 
     assert!(!restored.cycle_random.swing);
     assert!(restored.cycle_random.chord);
+}
+
+#[test]
+fn zero_weight_plugins_round_trip_and_are_omitted_when_empty() {
+    let state = GridSequencerSessionState {
+        zero_weight_plugins: vec!["Dexed".to_string()],
+        ..GridSequencerSessionState::default()
+    };
+
+    let json = serde_json::to_string(&state).unwrap();
+    let restored: GridSequencerSessionState = serde_json::from_str(&json).unwrap();
+
+    assert_eq!(restored.zero_weight_plugins, ["Dexed"]);
+    let empty = serde_json::to_string(&GridSequencerSessionState::default()).unwrap();
+    assert!(!empty.contains("zero_weight_plugins"), "{empty}");
 }

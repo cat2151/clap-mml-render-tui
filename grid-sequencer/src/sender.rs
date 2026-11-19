@@ -60,6 +60,11 @@ impl GridPatch {
             effect_chain: String::new(),
         }
     }
+
+    /// server へ送る音色の patch 文字列（wire）。`patch` は表示名。
+    pub(crate) fn wire(&self) -> Option<String> {
+        self.patch.as_deref().map(cmrt_core::wire_from_display)
+    }
 }
 pub use status::{
     GridConnectionPhase, GridConnectionStatus, GridProgress, GridRowPatchPhase, GridRowPatchStatus,

@@ -32,7 +32,7 @@ fn handle_normal_i_on_the_init_column_still_starts_the_inline_insert() {
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_track = 2;
     app.editor.cursor_measure = 0;
-    app.editor.data[2][0] = r#"{"Surge XT patch": "Bass/Snapshot Bass.fxp"}"#.to_string();
+    app.editor.data[2][0] = r#"{"patch": "Bass/Snapshot Bass.fxp:"}"#.to_string();
 
     app.handle_normal(KeyCode::Char('i'));
 
@@ -40,7 +40,7 @@ fn handle_normal_i_on_the_init_column_still_starts_the_inline_insert() {
     assert!(!app.mml_overlay.is_open());
     assert_eq!(
         app.textarea.lines().join("\n"),
-        r#"{"Surge XT patch": "Bass/Snapshot Bass.fxp"}"#,
+        r#"{"patch": "Bass/Snapshot Bass.fxp:"}"#,
         "init セルは従来どおり生の JSON を直接編集する"
     );
 }

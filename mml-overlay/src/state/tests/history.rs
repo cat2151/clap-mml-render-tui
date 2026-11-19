@@ -2,7 +2,7 @@
 
 use super::*;
 
-const PAD_JSON: &str = r#"{"Surge XT patch": "Pads/Pad 1.fxp"}"#;
+const PAD_JSON: &str = r#"{"patch": "Pads/Pad 1.fxp:"}"#;
 
 fn opened_with_history() -> MmlOverlay<'static> {
     let mut overlay = MmlOverlay::default();

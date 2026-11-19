@@ -94,8 +94,12 @@ pub(super) trait SoundSink {
 
 impl SoundSink for RealtimePlayServerSupervisor {
     fn prepare_patch(&self, instance_id: u8, patch: &LivePatch) -> SinkResult {
-        self.prepare_live_patch_with_effect_chain(instance_id, patch.patch(), patch.effect_chain())
-            .map_err(|error| format!("{error:#}"))
+        self.prepare_live_patch_with_effect_chain(
+            instance_id,
+            patch.wire().as_deref(),
+            patch.effect_chain(),
+        )
+        .map_err(|error| format!("{error:#}"))
     }
 
     fn standby_instance_of(&self, instance_id: u8) -> Option<u8> {
@@ -111,16 +115,20 @@ impl SoundSink for RealtimePlayServerSupervisor {
     fn prepare_standby_patch(&self, instance_id: u8, patch: &LivePatch) -> SinkResult {
         self.prepare_standby_patch_with_effect_chain(
             instance_id,
-            patch.patch(),
+            patch.wire().as_deref(),
             patch.effect_chain(),
         )
         .map_err(|error| format!("{error:#}"))
     }
 
     fn begin_preload(&self, instance_id: u8, patch: &LivePatch) -> Result<PreloadTicket, String> {
-        self.begin_standby_patch_with_effect_chain(instance_id, patch.patch(), patch.effect_chain())
-            .map(PreloadTicket::Server)
-            .map_err(|error| format!("{error:#}"))
+        self.begin_standby_patch_with_effect_chain(
+            instance_id,
+            patch.wire().as_deref(),
+            patch.effect_chain(),
+        )
+        .map(PreloadTicket::Server)
+        .map_err(|error| format!("{error:#}"))
     }
 
     fn poll_preload(&self, ticket: &mut PreloadTicket) -> Result<bool, String> {

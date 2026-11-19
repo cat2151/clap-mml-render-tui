@@ -142,7 +142,7 @@ fn a_realistic_mml_line_takes_the_mml_path() {
 /// 行頭 patch JSON があっても、範囲は行のバイト位置のまま返る。
 #[test]
 fn a_leading_patch_json_does_not_shift_the_range() {
-    let line = r#"{"Surge XT patch": "Leads/Lead 1.fxp"} cde"#;
+    let line = r#"{"patch": "Leads/Lead 1.fxp:"} cde"#;
     let mml_start = line.len() - 3;
 
     assert_eq!(

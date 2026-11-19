@@ -225,7 +225,7 @@ pub(super) fn inject_catalog(app: &mut DawApp, displays: &[&str]) {
 }
 
 pub(super) fn patch_init_cell(display: &str) -> String {
-    format!(r#"{{"Surge XT patch": "{display}"}}"#)
+    format!(r#"{{"patch": "{display}:"}}"#)
 }
 
 pub(super) const TEST_BASS_PATCH: &str = "patches_factory/Basses/Wobble Bass.fxp";

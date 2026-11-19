@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn a_line_is_split_into_its_patch_and_its_performance() {
     let lines = check_lines(&[
-        r#"{"Surge XT patch": "patches_factory/Keys/Digi Harpsi.fxp"} cde"#.to_string(),
+        r#"{"patch": "patches_factory/Keys/Digi Harpsi.fxp:"} cde"#.to_string(),
         "g1".to_string(),
     ])
     .unwrap();

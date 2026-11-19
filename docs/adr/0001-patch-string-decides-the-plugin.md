@@ -1,6 +1,6 @@
 # ADR 0001: patch 文字列がプラグインを決める
 
-- 状態: 採用
+- 状態: 置き換え済み（[0031](0031-tui-holds-display-names-and-writes-wire.md)）
 - 関連: [0003](0003-mml-patch-key.md) / [0006](0006-per-profile-relative-base.md) /
   play-server `docs/adr/0007-patch-string-decides-the-plugin.md`（判別規則の実装本体）
 

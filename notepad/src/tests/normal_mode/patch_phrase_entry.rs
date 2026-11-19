@@ -17,7 +17,7 @@ fn handle_normal_f_shows_error_when_current_line_has_no_patch_json() {
 #[test]
 fn handle_normal_f_enters_patch_phrase_for_current_patch() {
     let mut app = NotepadScreen::new_for_test(test_config());
-    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} cde"#.to_string()];
+    app.editor.lines = vec![r#"{"patch":"Pads/Pad 1.fxp:"} cde"#.to_string()];
 
     app.handle_normal(KeyCode::Char('f'));
 

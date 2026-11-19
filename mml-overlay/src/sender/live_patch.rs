@@ -29,8 +29,16 @@ impl LivePatch {
         }
     }
 
+    /// 音色の表示名。
     pub fn patch(&self) -> Option<&str> {
         self.patch.as_deref()
+    }
+
+    /// server へ送る音色の patch 文字列（wire）。
+    pub(crate) fn wire(&self) -> Option<String> {
+        self.patch
+            .as_deref()
+            .map(clap_mml_play_server_core::wire_from_display)
     }
 
     pub fn effect_chain(&self) -> &str {

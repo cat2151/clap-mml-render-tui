@@ -46,7 +46,7 @@ fn patch_phrase_screen_renders_history_and_favorites_lists() {
 #[test]
 fn patch_phrase_screen_renders_as_overlay_on_notepad_screen() {
     let mut app = NotepadScreen::new_for_test(test_config());
-    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} old"#.to_string()];
+    app.editor.lines = vec![r#"{"patch":"Pads/Pad 1.fxp:"} old"#.to_string()];
     app.mode = Mode::PatchPhrase;
     app.patch_phrase.patch_name = Some("Pads/Pad 1.fxp".to_string());
     app.patch_phrase_store.patches.insert(
@@ -85,7 +85,7 @@ fn patch_phrase_screen_renders_as_overlay_on_notepad_screen() {
 #[test]
 fn patch_phrase_overlay_is_centered_like_other_overlays() {
     let mut app = NotepadScreen::new_for_test(test_config());
-    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} old"#.to_string()];
+    app.editor.lines = vec![r#"{"patch":"Pads/Pad 1.fxp:"} old"#.to_string()];
     app.mode = Mode::PatchPhrase;
     app.patch_phrase.patch_name = Some("Pads/Pad 1.fxp".to_string());
     app.patch_phrase_store.patches.insert(
@@ -126,13 +126,13 @@ fn patch_phrase_screen_keeps_status_below_overlay_panes() {
     let mut app = NotepadScreen::new_for_test(test_config());
     app.mode = Mode::PatchPhrase;
     app.test_set_render_job_status(
-        r#"{"Surge XT patch":"Brass/Brass 1.fxp"} c"#,
+        r#"{"patch":"Brass/Brass 1.fxp:"} c"#,
         Some(crate::TuiRenderJobStatus::Running {
             elapsed: std::time::Duration::ZERO,
         }),
     );
     app.test_set_render_job_status(
-        r#"{"Surge XT patch":"sfz/Guitar/04-Guitar.sfz"} c"#,
+        r#"{"patch":"sfz/Guitar/04-Guitar.sfz:"} c"#,
         Some(crate::TuiRenderJobStatus::Pending),
     );
     app.patch_phrase.patch_name = Some("Pads/Pad 1.fxp".to_string());
@@ -201,7 +201,7 @@ fn patch_phrase_overlay_marks_cached_preview_items_with_music_note() {
         },
     );
     app.audio.cache.lock().unwrap().insert(
-        r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string(),
+        r#"{"patch":"Pads/Pad 1.fxp:"} l8cdef"#.to_string(),
         vec![0.1, 0.2],
     );
 

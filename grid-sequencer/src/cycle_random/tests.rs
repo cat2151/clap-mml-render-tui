@@ -56,7 +56,7 @@ fn every_item_round_trips_through_get_and_set() {
 #[test]
 fn the_number_keys_toggle_the_matching_item() {
     let mut screen = screen();
-    screen.toggle_cycle_random_overlay();
+    screen.toggle_cycle_random_overlay(Vec::new());
     assert!(screen.cycle_random_open());
 
     for (index, item) in CycleRandomItem::ALL.iter().enumerate() {
@@ -71,7 +71,7 @@ fn the_number_keys_toggle_the_matching_item() {
 #[test]
 fn space_toggles_the_row_under_the_cursor() {
     let mut screen = screen();
-    screen.toggle_cycle_random_overlay();
+    screen.toggle_cycle_random_overlay(Vec::new());
 
     screen.handle_cycle_random_key(press(KeyCode::Down));
     screen.handle_cycle_random_key(press(KeyCode::Char(' ')));
@@ -85,7 +85,7 @@ fn space_toggles_the_row_under_the_cursor() {
 #[test]
 fn the_cursor_stops_at_both_ends() {
     let mut screen = screen();
-    screen.toggle_cycle_random_overlay();
+    screen.toggle_cycle_random_overlay(Vec::new());
 
     screen.handle_cycle_random_key(press(KeyCode::Up));
     assert_eq!(screen.cycle_random_cursor(), Some(0));
@@ -102,7 +102,7 @@ fn the_cursor_stops_at_both_ends() {
 #[test]
 fn shift_a_turns_everything_on_and_shift_n_turns_everything_off() {
     let mut screen = screen();
-    screen.toggle_cycle_random_overlay();
+    screen.toggle_cycle_random_overlay(Vec::new());
 
     screen.handle_cycle_random_key(KeyEvent::new(KeyCode::Char('N'), KeyModifiers::SHIFT));
     assert_eq!(screen.cycle_random(), CycleRandom::NONE);
@@ -115,7 +115,7 @@ fn shift_a_turns_everything_on_and_shift_n_turns_everything_off() {
 fn esc_q_and_a_all_close_the_overlay() {
     for code in [KeyCode::Esc, KeyCode::Char('q'), KeyCode::Char('a')] {
         let mut screen = screen();
-        screen.toggle_cycle_random_overlay();
+        screen.toggle_cycle_random_overlay(Vec::new());
         screen.handle_cycle_random_key(press(code));
         assert!(!screen.cycle_random_open(), "{code:?} で閉じる");
     }

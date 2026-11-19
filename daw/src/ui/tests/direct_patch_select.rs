@@ -14,7 +14,7 @@ fn app_with_selector_open() -> DawApp {
     );
     app.editor.cursor_track = 2;
     app.editor.cursor_measure = 1;
-    app.editor.data[2][0] = r#"{"Surge XT patch": "Pads/Snapshot Pad.fxp"}"#.to_string();
+    app.editor.data[2][0] = r#"{"patch": "Pads/Snapshot Pad.fxp:"}"#.to_string();
     app.editor.data[2][1] = "cde".to_string();
     assert!(app.open_direct_patch_select());
     app

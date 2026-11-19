@@ -47,9 +47,12 @@ pub(super) fn grid_session_from_history(
     let fixed_chord = session
         .fixed_chord
         .map(|fixed| super::super::grid_sequencer::FixedChordProgression::new(fixed.input));
+    let plugin_weights =
+        super::super::grid_sequencer::PluginWeights::from_zero_plugins(session.zero_weight_plugins);
     Some(
         super::super::grid_sequencer::GridSequencerSession::new(instances, cycle_random)
-            .with_fixed_chord(fixed_chord),
+            .with_fixed_chord(fixed_chord)
+            .with_plugin_weights(plugin_weights),
     )
 }
 
@@ -155,6 +158,11 @@ pub(super) fn grid_session_to_history(
             .map(|fixed| crate::history::GridFixedChordState {
                 input: fixed.input().to_string(),
             }),
+        zero_weight_plugins: session
+            .plugin_weights
+            .zero_plugins()
+            .map(str::to_string)
+            .collect(),
     })
 }
 

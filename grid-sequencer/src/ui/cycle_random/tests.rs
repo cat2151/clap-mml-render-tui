@@ -34,7 +34,7 @@ fn screen() -> GridSequencerScreen {
 #[test]
 fn the_overlay_lists_every_item_with_its_state() {
     let mut screen = screen();
-    screen.toggle_cycle_random_overlay();
+    screen.toggle_cycle_random_overlay(Vec::new());
     screen.set_cycle_random(CycleRandomItem::Note, false);
 
     let rendered = render(&screen);
@@ -61,31 +61,32 @@ fn the_overlay_is_hidden_until_it_is_opened() {
 /// 描画と当たり判定が同じ矩形を見ていないと、見えている行と切り替わる行がずれる。
 #[test]
 fn a_click_on_a_row_hits_the_item_drawn_there() {
-    let overlay = overlay_rect(AREA);
+    let overlay = overlay_rect(AREA, &[]);
 
     for (index, _) in CycleRandomItem::ALL.iter().enumerate() {
         let row = overlay.y + 1 + index as u16;
-        assert_eq!(hit_test(AREA, overlay.x + 3, row), Some(Some(index)));
+        assert_eq!(hit_test(AREA, &[], overlay.x + 3, row), Some(Some(index)));
     }
     // 枠線と、項目より下の操作説明。
-    assert_eq!(hit_test(AREA, overlay.x + 3, overlay.y), Some(None));
+    assert_eq!(hit_test(AREA, &[], overlay.x + 3, overlay.y), Some(None));
     assert_eq!(
         hit_test(
             AREA,
+            &[],
             overlay.x + 3,
             overlay.y + 1 + CycleRandomItem::ALL.len() as u16
         ),
         Some(None)
     );
     // 枠の外。
-    assert_eq!(hit_test(AREA, 0, 0), None);
+    assert_eq!(hit_test(AREA, &[], 0, 0), None);
 }
 
 #[test]
 fn clicking_a_row_toggles_that_item_and_moves_the_cursor() {
     let mut screen = screen();
-    screen.toggle_cycle_random_overlay();
-    let overlay = overlay_rect(AREA);
+    screen.toggle_cycle_random_overlay(Vec::new());
+    let overlay = overlay_rect(AREA, &[]);
 
     screen.handle_cycle_random_click(overlay.x + 3, overlay.y + 1 + 2, AREA);
 
@@ -97,10 +98,49 @@ fn clicking_a_row_toggles_that_item_and_moves_the_cursor() {
 #[test]
 fn clicking_outside_the_frame_closes_the_overlay() {
     let mut screen = screen();
-    screen.toggle_cycle_random_overlay();
+    screen.toggle_cycle_random_overlay(Vec::new());
 
     screen.handle_cycle_random_click(0, 0, AREA);
 
     assert!(!screen.cycle_random_open());
     assert_eq!(screen.cycle_random(), CycleRandom::ALL, "設定は動かさない");
+}
+
+fn plugins() -> Vec<String> {
+    vec!["Dexed".to_string(), "Surge XT".to_string()]
+}
+
+#[test]
+fn plugin_rows_show_their_weight_below_the_items() {
+    let mut screen = screen();
+    screen.toggle_cycle_random_overlay(plugins());
+    screen.toggle_plugin_weight("Dexed");
+
+    let rendered = render(&screen).replace(' ', "");
+
+    assert!(rendered.contains("[]Dexed音色の出現率0"), "{rendered}");
+    assert!(
+        rendered.contains("[x]SurgeXT音色の出現率normal"),
+        "{rendered}"
+    );
+}
+
+#[test]
+fn clicking_a_plugin_row_toggles_that_plugin() {
+    let mut screen = screen();
+    screen.toggle_cycle_random_overlay(plugins());
+    let overlay = overlay_rect(AREA, &plugins());
+    let surge_row = overlay.y + 1 + CycleRandomItem::ALL.len() as u16 + 1;
+
+    assert_eq!(
+        hit_test(AREA, &plugins(), overlay.x + 3, surge_row),
+        Some(Some(CycleRandomItem::ALL.len() + 1))
+    );
+    screen.handle_cycle_random_click(overlay.x + 3, surge_row, AREA);
+
+    assert_eq!(
+        screen.plugin_weights().weight("Surge XT"),
+        crate::PluginWeight::Zero
+    );
+    assert!(screen.cycle_random_open(), "click では閉じない");
 }

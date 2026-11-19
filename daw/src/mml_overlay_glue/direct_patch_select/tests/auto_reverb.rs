@@ -97,7 +97,7 @@ fn dexed_and_surge_state() -> PatchLoadState {
 }
 
 fn patch_cell(patch: &str) -> String {
-    format!(r#"{{"Surge XT patch": "{patch}"}}"#)
+    format!(r#"{{"patch": "{patch}:"}}"#)
 }
 
 fn app_with_init_cell(init_cell: &str) -> (DawApp, std::sync::mpsc::Receiver<crate::CacheJob>) {
@@ -189,7 +189,7 @@ fn a_dexed_snare_on_a_track_without_a_chain_previews_and_confirms_the_drum_room(
         head_json(&app)["auto reverb"],
         json!({"Dragonfly Room Reverb preset": "Small Drum Room"})
     );
-    assert_eq!(head_json(&app)["Surge XT patch"], DEXED_SNARE);
+    assert_eq!(head_json(&app)["patch"], format!("{DEXED_SNARE}:"));
     assert_eq!(app.editor.data[2][1], "c");
 }
 
@@ -207,7 +207,7 @@ fn switching_to_a_dexed_snare_writes_the_patch_and_the_chain_together() {
     app.handle_direct_patch_select_key_event(key(KeyCode::Enter));
     app.handle_direct_patch_select_key_event(key(KeyCode::Enter));
 
-    assert_eq!(head_json(&app)["Surge XT patch"], DEXED_SNARE);
+    assert_eq!(head_json(&app)["patch"], format!("{DEXED_SNARE}:"));
     assert_eq!(
         init_chain(&app),
         json!([{"Dragonfly Room Reverb preset": "Small Drum Room"}])
@@ -217,9 +217,8 @@ fn switching_to_a_dexed_snare_writes_the_patch_and_the_chain_together() {
 #[test]
 fn a_reverb_without_the_record_is_marked_manual_and_kept() {
     let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
-    let init_cell = format!(
-        r#"{{"Surge XT patch": "{DEXED_SNARE}", "effects after instrument": {HALL_CHAIN}}}"#
-    );
+    let init_cell =
+        format!(r#"{{"patch": "{DEXED_SNARE}:", "effects after instrument": {HALL_CHAIN}}}"#);
     let (mut app, _cache_rx) = app_with_init_cell(&init_cell);
     let sink = attach_recording_sink(&mut app);
 
@@ -248,7 +247,7 @@ fn only_the_auto_reverb_stage_is_replaced_and_the_other_stages_stay() {
     let hall = json!({"Dragonfly Hall Reverb preset": "Medium Clear Hall"});
     let room = json!({"Dragonfly Room Reverb preset": "Small Drum Room"});
     let init_cell = json!({
-        "Surge XT patch": DEXED_SNARE,
+        "patch": format!("{DEXED_SNARE}:"),
         "effects after instrument": [delay.clone(), hall.clone()],
         "auto reverb": hall,
     })
@@ -282,7 +281,7 @@ fn a_surge_patch_previews_and_confirms_without_a_chain() {
 
     app.handle_direct_patch_select_key_event(key(KeyCode::Enter));
 
-    assert_eq!(head_json(&app)["Surge XT patch"], SURGE_PAD);
+    assert_eq!(head_json(&app)["patch"], format!("{SURGE_PAD}:"));
     assert_eq!(init_chain(&app), json!([]));
 }
 

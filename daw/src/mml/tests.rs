@@ -37,14 +37,14 @@ fn build_cell_mml_includes_timbre_in_measure() {
     // 音色 JSON が小節 MML に含まれること（issue #67 修正の前提: 音色変更時に小節を再キャッシュすべき根拠）
     let mut data = empty_data(TRACKS, MEASURES);
     data[0][0] = DEFAULT_TRACK0_MML.to_string();
-    data[2][0] = r#"{"Surge XT patch": "piano"}"#.to_string();
+    data[2][0] = r#"{"patch": "piano:"}"#.to_string();
     data[2][1] = "cde".to_string();
 
     let mml = build_cell_mml_from_data(&data, MEASURES, 2, 1);
     let json = final_json(&mml);
     assert_eq!(
-        json.get("Surge XT patch").and_then(Value::as_str),
-        Some("piano"),
+        json.get("patch").and_then(Value::as_str),
+        Some("piano:"),
         "音色 JSON が MML に含まれていない: {}",
         mml
     );
@@ -61,7 +61,7 @@ fn build_cell_mml_merges_json_prefix_and_orders_non_json_as_conductor_init_measu
     let mut data = empty_data(TRACKS, MEASURES);
     data[0][0] = r#"{"scope":"conductor","nested":{"a":1}}t120"#.to_string();
     data[0][1] = r#"{"swing":55}k0"#.to_string();
-    data[2][0] = r#"{"Surge XT patch":"piano","scope":"init","nested":{"b":2}}@1"#.to_string();
+    data[2][0] = r#"{"patch":"piano:","scope":"init","nested":{"b":2}}@1"#.to_string();
     data[2][1] = r#"{"velocity":80,"scope":"measure"}cde"#.to_string();
 
     let mml = build_cell_mml_from_data(&data, MEASURES, 2, 1);
@@ -70,10 +70,7 @@ fn build_cell_mml_merges_json_prefix_and_orders_non_json_as_conductor_init_measu
 
     assert_eq!(json.get("scope").and_then(Value::as_str), Some("measure"));
     assert_eq!(json.get("swing").and_then(Value::as_i64), Some(55));
-    assert_eq!(
-        json.get("Surge XT patch").and_then(Value::as_str),
-        Some("piano")
-    );
+    assert_eq!(json.get("patch").and_then(Value::as_str), Some("piano:"));
     assert_eq!(json.pointer("/nested/a").and_then(Value::as_i64), Some(1));
     assert_eq!(json.pointer("/nested/b").and_then(Value::as_i64), Some(2));
     assert_eq!(remaining, "t120k0@1cde");
@@ -102,11 +99,11 @@ fn build_cell_mml_timbre_change_affects_all_measures() {
     // → 音色変更時は当該 track の全小節を再キャッシュしなければならない理由
     let mut data_piano = empty_data(TRACKS, MEASURES);
     data_piano[0][0] = DEFAULT_TRACK0_MML.to_string();
-    data_piano[2][0] = r#"{"Surge XT patch": "piano"}"#.to_string();
+    data_piano[2][0] = r#"{"patch": "piano:"}"#.to_string();
     data_piano[2][1] = "cde".to_string();
 
     let mut data_guitar = data_piano.clone();
-    data_guitar[2][0] = r#"{"Surge XT patch": "guitar"}"#.to_string();
+    data_guitar[2][0] = r#"{"patch": "guitar:"}"#.to_string();
 
     let mml_piano = build_cell_mml_from_data(&data_piano, MEASURES, 2, 1);
     let mml_guitar = build_cell_mml_from_data(&data_guitar, MEASURES, 2, 1);
@@ -123,7 +120,7 @@ fn build_cell_mml_track0_change_affects_all_tracks() {
     // → track0 セル変更時は全演奏トラックの全小節を再キャッシュしなければならない理由
     let mut data_t120 = empty_data(TRACKS, MEASURES);
     data_t120[0][0] = DEFAULT_TRACK0_MML.to_string();
-    data_t120[2][0] = r#"{"Surge XT patch": "piano"}"#.to_string();
+    data_t120[2][0] = r#"{"patch": "piano:"}"#.to_string();
     data_t120[2][1] = "cde".to_string();
 
     let mut data_t200 = data_t120.clone();
@@ -144,7 +141,7 @@ fn build_cell_mml_empty_notes_cell_has_no_note_content() {
     // → kick_cache は data[track][measure] が空のときジョブを投入しないことで正しい挙動となる（issue #69 修正）
     let mut data = empty_data(TRACKS, MEASURES);
     data[0][0] = DEFAULT_TRACK0_MML.to_string();
-    data[2][0] = r#"{"Surge XT patch": "piano"}"#.to_string();
+    data[2][0] = r#"{"patch": "piano:"}"#.to_string();
     data[2][1] = "".to_string(); // 音符が空
 
     // 空の音符セルは kick_cache によってジョブが投入されないため
@@ -172,8 +169,8 @@ fn build_cell_mml_empty_notes_cell_has_no_note_content() {
 fn build_measure_mml_returns_empty_when_measure_has_no_notes() {
     let mut data = empty_data(TRACKS, MEASURES);
     data[0][0] = DEFAULT_TRACK0_MML.to_string();
-    data[2][0] = r#"{"Surge XT patch": "piano"}"#.to_string();
-    data[3][0] = r#"{"Surge XT patch": "brass"}"#.to_string();
+    data[2][0] = r#"{"patch": "piano:"}"#.to_string();
+    data[3][0] = r#"{"patch": "brass:"}"#.to_string();
 
     let mml = build_measure_mml_from_data(&data, MEASURES, TRACKS, 1, &no_solo_tracks(TRACKS));
 
@@ -184,15 +181,15 @@ fn build_measure_mml_returns_empty_when_measure_has_no_notes() {
 fn build_measure_mml_keeps_only_tracks_with_notes() {
     let mut data = empty_data(TRACKS, MEASURES);
     data[0][0] = DEFAULT_TRACK0_MML.to_string();
-    data[2][0] = r#"{"Surge XT patch": "piano"}"#.to_string();
+    data[2][0] = r#"{"patch": "piano:"}"#.to_string();
     data[2][1] = "cde".to_string();
-    data[3][0] = r#"{"Surge XT patch": "brass"}"#.to_string();
+    data[3][0] = r#"{"patch": "brass:"}"#.to_string();
 
     let mml = build_measure_mml_from_data(&data, MEASURES, TRACKS, 1, &no_solo_tracks(TRACKS));
 
     assert!(mml.contains("cde"), "音符が MML に含まれていない: {}", mml);
     assert!(
-        !mml.contains(r#"{"Surge XT patch": "brass"}"#),
+        !mml.contains(r#"{"patch": "brass:"}"#),
         "音符のない track が MML に含まれている: {}",
         mml
     );
@@ -202,7 +199,7 @@ fn build_measure_mml_keeps_only_tracks_with_notes() {
 fn build_measure_mml_reapplies_timbre_to_semicolon_branches_in_same_track() {
     let mut data = empty_data(TRACKS, MEASURES);
     data[0][0] = DEFAULT_TRACK0_MML.to_string();
-    data[2][0] = r#"{"Surge XT patch": "piano"}"#.to_string();
+    data[2][0] = r#"{"patch": "piano:"}"#.to_string();
     data[2][1] = "cde;gab".to_string();
 
     let mml = build_measure_mml_from_data(&data, MEASURES, TRACKS, 1, &no_solo_tracks(TRACKS));
@@ -210,8 +207,8 @@ fn build_measure_mml_reapplies_timbre_to_semicolon_branches_in_same_track() {
     let json = json.expect("merged JSON should be present");
 
     assert_eq!(
-        json.get("Surge XT patch").and_then(Value::as_str),
-        Some("piano"),
+        json.get("patch").and_then(Value::as_str),
+        Some("piano:"),
         "timbre JSON should be merged into the final leading JSON: {}",
         mml
     );
@@ -242,9 +239,9 @@ fn build_measure_mml_reapplies_timbre_to_semicolon_branches_in_same_track() {
 fn build_measure_mml_keeps_only_solo_tracks_when_solo_mode_is_active() {
     let mut data = empty_data(TRACKS, MEASURES);
     data[0][0] = DEFAULT_TRACK0_MML.to_string();
-    data[2][0] = r#"{"Surge XT patch": "piano"}"#.to_string();
+    data[2][0] = r#"{"patch": "piano:"}"#.to_string();
     data[2][1] = "cde".to_string();
-    data[3][0] = r#"{"Surge XT patch": "brass"}"#.to_string();
+    data[3][0] = r#"{"patch": "brass:"}"#.to_string();
     data[3][1] = "gab".to_string();
 
     let mut solo_tracks = no_solo_tracks(TRACKS);
@@ -271,14 +268,14 @@ fn build_cell_mml_track8_is_accessible() {
     let last_track = TRACKS - 1;
     let mut data = empty_data(TRACKS, MEASURES);
     data[0][0] = DEFAULT_TRACK0_MML.to_string();
-    data[last_track][0] = r#"{"Surge XT patch": "bass"}"#.to_string();
+    data[last_track][0] = r#"{"patch": "bass:"}"#.to_string();
     data[last_track][1] = "c4d4e4f4".to_string();
 
     let mml = build_cell_mml_from_data(&data, MEASURES, last_track, 1);
     let json = final_json(&mml);
     assert_eq!(
-        json.get("Surge XT patch").and_then(Value::as_str),
-        Some("bass"),
+        json.get("patch").and_then(Value::as_str),
+        Some("bass:"),
         "track8 の音色 JSON が MML に含まれていない: {}",
         mml
     );
@@ -324,13 +321,13 @@ fn the_chord_row_is_left_out_of_the_measure_mml() {
 fn build_cell_mml_keeps_the_effect_chain_array_from_the_init_cell() {
     let mut data = empty_data(TRACKS, MEASURES);
     data[0][0] = DEFAULT_TRACK0_MML.to_string();
-    data[2][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp","effects after instrument":[{"A preset":"1"},{"B preset":"2"}]}"#.to_string();
+    data[2][0] = r#"{"patch":"Pads/Pad 1.fxp:","effects after instrument":[{"A preset":"1"},{"B preset":"2"}]}"#.to_string();
     data[2][1] = "cdef".to_string();
 
     let mml = build_cell_mml_from_data(&data, MEASURES, 2, 1);
 
     let json = final_json(&mml);
-    assert_eq!(json["Surge XT patch"], "Pads/Pad 1.fxp");
+    assert_eq!(json["patch"], "Pads/Pad 1.fxp:");
     assert_eq!(
         json["effects after instrument"],
         serde_json::json!([{"A preset": "1"}, {"B preset": "2"}])

@@ -301,6 +301,59 @@ fn per_root_display_starts_with_each_root_folder_name() {
     assert_eq!(plugin.base.resolve(&displays[1]), harp.to_string_lossy());
 }
 
+/// `.h2p` を共有する TyrellN6 と Zebralette3 は、Zebralette3 側の表示名にだけ `:z` が付き、
+/// その表示名で引くと Zebralette3 へ、タグの無い表示名は TyrellN6 へ routing される。
+#[test]
+fn a_zebralette3_patch_is_listed_with_its_tag_and_routes_to_zebralette3() {
+    let root = std::env::temp_dir().join(format!("cmrt_h2p_tags_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let n6 = root.join("TyrellN6");
+    let z3 = root.join("Zebralette3");
+    std::fs::create_dir_all(n6.join("01 Basses")).unwrap();
+    std::fs::create_dir_all(z3.join("1 Poly Keys")).unwrap();
+    std::fs::write(n6.join("01 Basses").join("Abgrund.h2p"), b"#AM=TyrellN6\n").unwrap();
+    std::fs::write(
+        z3.join("1 Poly Keys").join("Keys.H2P"),
+        b"#AM=Zebralette3\n",
+    )
+    .unwrap();
+    let plugin = |name: &str, id: &str, dir: &std::path::Path| CatalogPlugin {
+        name: name.to_string(),
+        plugin_path: format!("{name}.clap"),
+        plugin_id: Some(id.to_string()),
+        base: PatchBase::Shared(dir.to_string_lossy().into_owned()),
+        dirs: vec![dir.to_string_lossy().into_owned()],
+        resolved_patches: None,
+        source_notices: Vec::new(),
+    };
+    let catalog = vec![
+        plugin("TyrellN6", "com.u-he.TyrellN6", &n6),
+        plugin("Zebralette3", "com.u-he.Zebralette3", &z3),
+    ];
+
+    let displays: Vec<String> = collect_patch_pairs_from_catalog(&catalog)
+        .unwrap()
+        .into_iter()
+        .map(|(display, _)| display)
+        .collect();
+    let _ = std::fs::remove_dir_all(&root);
+
+    assert_eq!(
+        displays,
+        vec![
+            "1 Poly Keys/Keys.H2P:z".to_string(),
+            "01 Basses/Abgrund.h2p".to_string(),
+        ]
+    );
+    let plugins = crate::patch_plugins::PatchPlugins::from_catalog(catalog);
+    assert_eq!(plugins.index_for_patch("1 Poly Keys/Keys.H2P:z"), Ok(1));
+    assert_eq!(plugins.index_for_patch("01 Basses/Abgrund.h2p"), Ok(0));
+    assert_eq!(
+        cmrt_core::wire_from_display(&displays[0]),
+        "1 Poly Keys/Keys.H2P:z"
+    );
+}
+
 fn catalog_plugin(base: String, dir: String) -> CatalogPlugin {
     CatalogPlugin {
         name: "test".to_string(),

@@ -161,7 +161,7 @@ fn daw_save_json_roundtrip_with_notes() {
     let mut track_volumes = empty_track_volumes(TRACKS);
     let mut restored_track_volumes = empty_track_volumes(TRACKS);
     data[0][0] = DEFAULT_TRACK0_MML.to_string();
-    data[2][0] = r#"{"Surge XT patch": "piano"}"#.to_string();
+    data[2][0] = r#"{"patch": "piano:"}"#.to_string();
     data[2][1] = "cde".to_string();
     data[2][2] = "efg".to_string();
     data[3][1] = "abc".to_string();

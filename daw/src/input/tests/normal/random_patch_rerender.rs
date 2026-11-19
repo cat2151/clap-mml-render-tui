@@ -30,7 +30,7 @@ fn handle_normal_r_rerenders_playable_measures_without_rendering_measure_zero() 
         app.handle_normal(crossterm::event::KeyCode::Char('r'));
 
         assert_eq!(
-            app.editor.data[2][0], r#"{"Surge XT patch": "Pad 1.fxp"}"#,
+            app.editor.data[2][0], r#"{"patch": "Pad 1.fxp:"}"#,
             "random patch should update the timbre cell"
         );
 
@@ -95,7 +95,7 @@ fn handle_normal_r_rerenders_playable_measures_without_rendering_measure_zero() 
         );
         let play_measure_track_mmls = app.playback.measure_track_mmls.lock().unwrap().clone();
         assert!(
-            play_measure_track_mmls[0][2].contains(r#""Surge XT patch":"Pad 1.fxp""#),
+            play_measure_track_mmls[0][2].contains(r#""patch":"Pad 1.fxp:""#),
             "hot reload should refresh per-track playback MMLs: {:?}",
             play_measure_track_mmls
         );

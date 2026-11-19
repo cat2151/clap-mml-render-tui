@@ -205,16 +205,13 @@ fn live_line_check_collects_every_line_in_order() {
             "--offline",
             "--out",
             "/tmp/lines.wav",
-            "{\"Surge XT patch\": \"a.fxp\"} c1",
+            "{\"patch\": \"a.fxp:\"} c1",
             "d1",
         ])
         .unwrap(),
         CliAction::LiveLineCheck(LiveLineCheckRequest {
             config: None,
-            lines: vec![
-                "{\"Surge XT patch\": \"a.fxp\"} c1".to_string(),
-                "d1".to_string()
-            ],
+            lines: vec!["{\"patch\": \"a.fxp:\"} c1".to_string(), "d1".to_string()],
             step_ms: 300,
             out: Some(PathBuf::from("/tmp/lines.wav")),
             offline: true,

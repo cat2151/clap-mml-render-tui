@@ -135,6 +135,7 @@ impl GridSequencerScreen {
     }
 
     /// 行用途に合う候補。通常NOTEだけは、専用行が予約済みのRoleを除く全catalogを使う。
+    /// 出現率 `0` の plugin の音色は除く（[`crate::plugin_weight`]）。
     pub(crate) fn patch_candidates_for_row(
         &self,
         row: usize,
@@ -151,6 +152,7 @@ impl GridSequencerScreen {
         let reserved = self.reserved_patch_roles().into_iter().collect::<Vec<_>>();
         candidates_for_purpose(ctx, purpose, &reserved)
             .into_iter()
+            .filter(|patch| self.drawable_patch(patch, ctx))
             .map(str::to_string)
             .collect()
     }
