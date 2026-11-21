@@ -12,6 +12,8 @@ pub use clap_mml_play_server_core::pipeline::{
     embedded_patch_ref, ensure_cmrt_dir, ensure_daw_dir, ensure_phrase_dir, mml_str_to_smf_bytes,
     mml_to_smf_bytes, play_samples, write_wav,
 };
+pub use clap_mml_play_server_core::surge_fx_preset;
+pub use clap_mml_play_server_core::surge_fx_source;
 pub use clap_mml_play_server_core::EffectPlugins;
 pub use clap_mml_play_server_core::PatchVoicing as AdapterPatchVoicing;
 pub use clap_mml_play_server_core::{

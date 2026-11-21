@@ -14,6 +14,7 @@ use measurements::{estimate_eta, format_eta, measure_patch_loads};
 
 mod cache_writer;
 mod drum_kits;
+mod effect_parameters;
 mod measurement_log;
 mod measurements;
 mod patch_metadata;
@@ -57,6 +58,16 @@ pub fn build_and_save(cfg: &Config) -> Result<BuildSummary> {
         anyhow::bail!("plugin_pathが空のためpatch catalog cacheを構築できません");
     }
     let path = cache_file_path().context("patch catalog cacheの保存先を取得できません")?;
+    if cmrt_core::builtin_effect_plugins().iter().any(|plugin| {
+        plugin.plugin_id == cmrt_core::surge_fx_preset::SURGE_FX_PLUGIN_ID
+            && std::path::Path::new(&plugin.plugin_path).is_file()
+    }) {
+        progress::run("Surge XT Effects parameter cache を保存", || {
+            effect_parameters::build_and_save(
+                &crate::config::config_app_dir().context("アプリ保存先を取得できません")?,
+            )
+        })?;
+    }
     let source_path =
         source_cache::cache_file_path().context("catalog source cacheの保存先を取得できません")?;
     let (plugins, skipped) = progress::run("plugin ごとの音色 source を探索", || {

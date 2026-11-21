@@ -90,7 +90,7 @@ version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -101,7 +101,7 @@ checksum = "291e6a250ff86cd4a820112fb8898808a366d8f9f58ce16d1f538353ad55747d"
 dependencies = [
  "anstyle",
  "once_cell_polyfill",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -497,7 +497,7 @@ dependencies = [
 [[package]]
 name = "cmrt-cache-player"
 version = "0.1.0"
-source = "git+https://github.com/cat2151/clap-mml-play-server#20df6b424024a0d243cb2159961916e2e6f4bcf4"
+source = "git+https://github.com/cat2151/clap-mml-play-server#61d9c761e58a55ebce2f29c11a9c295d256d8939"
 dependencies = [
  "clack-extensions",
  "clack-plugin",
@@ -535,7 +535,7 @@ dependencies = [
 [[package]]
 name = "cmrt-clack-timeline"
 version = "0.1.0"
-source = "git+https://github.com/cat2151/clap-mml-play-server#20df6b424024a0d243cb2159961916e2e6f4bcf4"
+source = "git+https://github.com/cat2151/clap-mml-play-server#61d9c761e58a55ebce2f29c11a9c295d256d8939"
 dependencies = [
  "clack-host",
  "cmrt-timeline",
@@ -553,7 +553,7 @@ dependencies = [
 [[package]]
 name = "cmrt-core"
 version = "0.1.0"
-source = "git+https://github.com/cat2151/clap-mml-play-server#20df6b424024a0d243cb2159961916e2e6f4bcf4"
+source = "git+https://github.com/cat2151/clap-mml-play-server#61d9c761e58a55ebce2f29c11a9c295d256d8939"
 dependencies = [
  "anyhow",
  "cat-self-update-lib",
@@ -895,7 +895,7 @@ dependencies = [
 [[package]]
 name = "cmrt-server-config"
 version = "0.1.0"
-source = "git+https://github.com/cat2151/clap-mml-play-server#20df6b424024a0d243cb2159961916e2e6f4bcf4"
+source = "git+https://github.com/cat2151/clap-mml-play-server#61d9c761e58a55ebce2f29c11a9c295d256d8939"
 dependencies = [
  "anyhow",
  "dirs",
@@ -908,7 +908,7 @@ dependencies = [
 [[package]]
 name = "cmrt-timeline"
 version = "0.1.0"
-source = "git+https://github.com/cat2151/clap-mml-play-server#20df6b424024a0d243cb2159961916e2e6f4bcf4"
+source = "git+https://github.com/cat2151/clap-mml-play-server#61d9c761e58a55ebce2f29c11a9c295d256d8939"
 
 [[package]]
 name = "cmrt-tui-core"
@@ -1264,7 +1264,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1363,7 +1363,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2607,7 +2607,7 @@ checksum = "19f132c84eca552bf34cab8ec81f1c1dcc229b811638f9d283dceabe58c5569e"
 [[package]]
 name = "plugin-presets"
 version = "0.1.0"
-source = "git+https://github.com/cat2151/clap-mml-play-server#20df6b424024a0d243cb2159961916e2e6f4bcf4"
+source = "git+https://github.com/cat2151/clap-mml-play-server#61d9c761e58a55ebce2f29c11a9c295d256d8939"
 dependencies = [
  "anyhow",
  "dirs",
@@ -2615,6 +2615,8 @@ dependencies = [
  "mlua",
  "serde",
  "serde_json",
+ "tree-sitter",
+ "tree-sitter-cpp",
  "winreg",
  "xmltree",
 ]
@@ -3031,7 +3033,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3485,7 +3487,7 @@ dependencies = [
  "parking_lot",
  "rustix",
  "signal-hook",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3741,6 +3743,16 @@ source = "git+https://github.com/cat2151/chord2mml-rust#90b20dd66bf368f5e9a17594
 dependencies = [
  "cc",
  "tree-sitter",
+]
+
+[[package]]
+name = "tree-sitter-cpp"
+version = "0.23.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "df2196ea9d47b4ab4a31b9297eaa5a5d19a0b121dceb9f118f6790ad0ab94743"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
 ]
 
 [[package]]
@@ -4093,7 +4105,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4450,7 +4462,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d6f32a0ff4a9f6f01231eb2059cc85479330739333e0e58cadf03b6af2cca10"
 dependencies = [
  "cfg-if",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
