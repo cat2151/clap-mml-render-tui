@@ -1,7 +1,7 @@
 # clap-mml-render-tui
 
 ## 概要
-MML TUI DAW（のようなもの）。[Surge XT](https://surge-synthesizer.github.io/) / [Dexed](https://asb2m10.github.io/dexed/) / [Vaporizer2](https://www.vast-dynamics.com/?q=Vaporizer2) / [Floe](https://floe.audio/) / [Sforzando](https://www.plogue.com/products/sforzando.html) / [Six Sines](https://github.com/baconpaul/six-sines) / [TyrellN6](https://u-he.com/products/tyrelln6/) / [Zebralette3](https://u-he.com/products/zebralette3/) / [TONE3000](https://www.tone3000.com/) / [Dragonfly Reverb](https://michaelwillis.github.io/dragonfly-reverb/) / [Voyage Voyage](https://www.musicalentropy.com/VoyageVoyage.html) / [Shu](https://mikey.audio/shu) / [METAL-GTX](https://unreal-instruments.wixsite.com/unreal-instruments/metal-gtx) のリッチな音を、MMLで手軽に楽しめます。Rustで書かれています。
+MML TUI DAW（のようなもの）。[Surge XT](https://surge-synthesizer.github.io/) / [Dexed](https://asb2m10.github.io/dexed/) / [Vaporizer2](https://www.vast-dynamics.com/?q=Vaporizer2) / [Floe](https://floe.audio/) / [Sforzando](https://www.plogue.com/products/sforzando.html) / [Six Sines](https://github.com/baconpaul/six-sines) / [TyrellN6](https://u-he.com/products/tyrelln6/) / [Zebralette3](https://u-he.com/products/zebralette3/) [JC-303](https://midilab.co/jc303/) / [TONE3000](https://www.tone3000.com/) / [Dragonfly Reverb](https://michaelwillis.github.io/dragonfly-reverb/) / [Voyage Voyage](https://www.musicalentropy.com/VoyageVoyage.html) / [Shu](https://mikey.audio/shu) / [METAL-GTX](https://unreal-instruments.wixsite.com/unreal-instruments/metal-gtx) のリッチな音を、MMLで手軽に楽しめます。Rustで書かれています。
 
 ## ダウンロード
 
@@ -52,6 +52,7 @@ cmrt build-patch-catalog-cache
 - [Six Sines](https://github.com/baconpaul/six-sines)
 - [TyrellN6](https://u-he.com/products/tyrelln6/)
 - [Zebralette3](https://u-he.com/products/zebralette3/)
+- [JC-303](https://midilab.co/jc303/)
 - effect（DAWモード の track に直列で挿せます）
   - [TONE3000](https://www.tone3000.com/)
   - Surge XT Effects（Surge XTに同梱）
@@ -69,8 +70,9 @@ cmrt build-patch-catalog-cache
   - [Floe ダウンロード画面](https://floe.audio/download/)
   - [Sforzando ダウンロード画面](https://www.plogue.com/downloads.html#sforzando)
   - [Six Sines GitHub releases画面](https://github.com/baconpaul/six-sines/releases)
-  - [TyrellN6 ダウンロード画面](https://u-he.com/products/tyrelln6/)
-  - [Zebralette3 ダウンロード画面](https://u-he.com/products/zebralette3/)
+  - [TyrellN6](https://u-he.com/products/tyrelln6/)
+  - [Zebralette3](https://u-he.com/products/zebralette3/)
+  - [JC-303](https://midilab.co/jc303/)
   - [TONE3000 ダウンロード画面](https://www.tone3000.com/plugin/download)
   - [Dragonfly Reverb GitHub releases画面](https://github.com/michaelwillis/dragonfly-reverb/releases)
   - [Voyage Voyage](https://www.musicalentropy.com/VoyageVoyage.html)
