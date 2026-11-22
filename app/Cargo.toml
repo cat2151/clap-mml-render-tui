@@ -63,6 +63,7 @@ hound = "3.5"
 rodio = "0.22"
 midly = "0.5"
 rustfft = "6.4.1"
+xmltree = "0.11"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [

@@ -14,6 +14,8 @@ use serde::{Deserialize, Serialize};
 use crate::patch_load::{PatchCatalogSnapshot, PatchLoadMeasurement};
 use crate::patch_plugins::PatchPlugins;
 
+pub mod cc1;
+
 pub const CACHE_FORMAT_VERSION: u32 = 5;
 pub const CACHE_RELATIVE_PATH: &str = "patch-catalog/catalog.json";
 
@@ -161,14 +163,27 @@ pub fn load_from(path: &Path) -> Result<LoadedPatchCatalogCache> {
             )
         })
         .collect();
+    let cc1 = match cc1::Cache::load_next_to(path) {
+        Ok(cache) => cache,
+        Err(error) => {
+            cache
+                .catalog_notes
+                .push(format!("CC1 cacheを利用できません: {error:#}"));
+            None
+        }
+    };
+    let mut snapshot = PatchCatalogSnapshot::new(
+        pairs,
+        audio_patches,
+        cache.plugins.into_iter().map(CatalogPlugin::from).collect(),
+        cache.catalog_notes,
+        load_measurements,
+    );
+    if let Some(cc1) = cc1 {
+        snapshot.restore_cc1(cc1);
+    }
     Ok(LoadedPatchCatalogCache {
-        snapshot: PatchCatalogSnapshot::new(
-            pairs,
-            audio_patches,
-            cache.plugins.into_iter().map(CatalogPlugin::from).collect(),
-            cache.catalog_notes,
-            load_measurements,
-        ),
+        snapshot,
         patch_voicings,
     })
 }

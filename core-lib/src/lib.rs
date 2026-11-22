@@ -17,11 +17,16 @@ pub use clap_mml_play_server_core::surge_fx_source;
 pub use clap_mml_play_server_core::EffectPlugins;
 pub use clap_mml_play_server_core::PatchVoicing as AdapterPatchVoicing;
 pub use clap_mml_play_server_core::{
+    apply_minimal_surge_data_home, parse_cartridge_patch_path, parse_dx7_cartridge,
+    prepare_clap_patch_state, SURGE_XT_PLUGIN_ID,
+};
+pub use clap_mml_play_server_core::{
     builtin_effect_plugins, effect_chain_spec_from_embedded_json, embedded_json_has_effect_chain,
     AudioEffectCatalog, AudioEffectPluginInfo, AudioEffectPreset, EffectChainSpec, EffectStageSpec,
     EFFECT_CHAIN_JSON_KEY, EFFECT_STAGE_BYPASS_JSON_KEY,
 };
 pub use clap_mml_play_server_core::{lexical_absolute, midi, patch_list, CoreConfig, PatchBase};
+pub use clap_mml_play_server_core::{load_entry, select_descriptor, PluginEntry, RealtimeRenderer};
 pub use clap_mml_play_server_core::{
     patch_lookup_candidates, patch_sort_metadata, plugin_voicing_source, AudioPatch,
     AudioPluginCatalog, AudioPluginInfo, PatchRef, PatchSortMetadata, PatchVoicingHint, PluginKey,
@@ -36,7 +41,9 @@ pub use clap_mml_play_server_core::{
 // catalog 構築の前に、ディスクに無い音色（plugin 埋め込みの factory 音色）を取得する。
 pub use clap_mml_play_server_core::{prepare_downloaded_patches, PatchDownload};
 // catalog 構築が `.sfz` の sample 総容量を記録し、重い patch を先読みから外すために使う。
-pub use clap_mml_play_server_core::{is_sfz_patch_path, sfz_sample_weight, SfzSampleWeight};
+pub use clap_mml_play_server_core::{
+    is_sfz_patch_path, sfz_files_without_cc1, sfz_sample_weight, SfzSampleWeight,
+};
 // catalog 構築が、鍵ごとに別の音を割り当てた kit を patch select で見分けられるよう記録する。
 pub use clap_mml_play_server_core::{
     floe_note_assignments, floe_preset_is_percussion, is_floe_preset_path, sfz_is_drum_kit,

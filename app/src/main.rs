@@ -21,6 +21,10 @@ use cli::{parse_cli_invocation_from, play_server_launch, CliAction, CliInvocatio
 use cli_playback::{cli_playback_mml, CliPlaybackMml};
 
 fn main() -> Result<()> {
+    use clap_mml_render_tui::patch_catalog_cache::{run_cc1_worker, CC1_WORKER_COMMAND};
+    if std::env::args_os().nth(1).as_deref() == Some(CC1_WORKER_COMMAND.as_ref()) {
+        return run_cc1_worker();
+    }
     clap_mml_render_tui::logging::install_panic_log_hook();
     let result = run();
     if let Err(error) = &result {

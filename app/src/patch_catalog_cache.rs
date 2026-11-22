@@ -76,6 +76,16 @@ pub fn build_and_save(cfg: &Config) -> Result<BuildSummary> {
             |name| report_progress(format!("  {name}: 音色 source を探索します…")),
         ))
     })?;
+    build_catalog(cfg, path, source_path, plugins, &skipped)
+}
+
+fn build_catalog(
+    cfg: &Config,
+    path: PathBuf,
+    source_path: PathBuf,
+    plugins: Vec<CatalogPlugin>,
+    skipped: &[SkippedCatalogPlugin],
+) -> Result<BuildSummary> {
     // scanが終わった時点でserver用の小さい結果を確定する。後続の全patch load計測が
     // 失敗しても、次のserver起動で同じcatalog scanを繰り返させない。
     progress::run(
@@ -165,7 +175,7 @@ pub fn build_and_save(cfg: &Config) -> Result<BuildSummary> {
         .values()
         .filter(|measurement| measurement.second_load_error.is_some())
         .count();
-    let mut catalog_notes = catalog_notes(&plugins, &skipped);
+    let mut catalog_notes = catalog_notes(&plugins, skipped);
     catalog_notes.extend(drum_note_failures);
     let cache = progress::run("catalog の保存データを組み立て", || {
         Ok(CacheFile {
@@ -186,10 +196,15 @@ pub fn build_and_save(cfg: &Config) -> Result<BuildSummary> {
             catalog_notes,
         })
     })?;
+    let publish_cc1 = progress::run(
+        "全音色の CC1 を調査し、判定 JSON を準備",
+        || cc1::prepare(&path, &cache),
+    )?;
     progress::run(
         &format!("patch catalog cache を保存: {}", path.display()),
         || write_cache(&path, &cache),
     )?;
+    progress::run("CC1 判定を cc1.json に保存", publish_cc1)?;
     // 残っても次回の構築で同じ結果として読まれるだけなので、消せなくても失敗にしない。
     let _ = fs::remove_file(&log_path);
     for line in sfz_weights::distribution_lines(&load_measurements, &sfz_weight_failures) {
@@ -229,3 +244,7 @@ fn catalog_notes(plugins: &[CatalogPlugin], skipped: &[SkippedCatalogPlugin]) ->
 
 #[cfg(test)]
 mod tests;
+
+mod cc1;
+
+pub use cc1::{run_cc1_worker, CC1_WORKER_COMMAND};

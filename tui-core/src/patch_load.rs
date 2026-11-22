@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use cmrt_patches::{PatchRoleIndex, PatchRoleInput};
 
+use crate::patch_catalog_cache::cc1;
 use crate::patch_plugins::{CatalogPlugin, PatchPlugins};
 
 /// catalog構築時に同じpatchを2回loadして得た計測結果。
@@ -64,6 +65,7 @@ pub struct PatchCatalogSnapshot {
     role_presets: Vec<(String, String)>,
     catalog_notes: Vec<String>,
     load_measurements: BTreeMap<String, PatchLoadMeasurement>,
+    cc1_observations: Arc<BTreeMap<cmrt_core::PluginKey, BTreeMap<String, cc1::Record>>>,
 }
 
 impl PatchCatalogSnapshot {
@@ -82,6 +84,7 @@ impl PatchCatalogSnapshot {
             role_presets: Vec::new(),
             catalog_notes,
             load_measurements,
+            cc1_observations: Arc::default(),
         };
         snapshot.rebuild_patch_roles(&[]);
         snapshot
@@ -139,6 +142,38 @@ impl PatchCatalogSnapshot {
     /// server shared coreが解釈済みの、plugin key付きpatch情報。
     pub fn audio_patches(&self) -> &[cmrt_core::AudioPatch] {
         &self.audio_patches
+    }
+
+    pub(crate) fn restore_cc1(&mut self, cache: cc1::Cache) {
+        let mut records = BTreeMap::<_, BTreeMap<_, _>>::new();
+        for record in cache.records {
+            records
+                .entry(record.patch.plugin.clone())
+                .or_default()
+                .insert(record.patch.display.clone(), record);
+        }
+        if records.values().map(BTreeMap::len).sum::<usize>() != self.audio_patches.len()
+            || self.audio_patches.iter().any(|patch| {
+                records
+                    .get(&patch.reference.plugin)
+                    .is_none_or(|group| !group.contains_key(&patch.reference.display))
+            })
+        {
+            self.catalog_notes
+                .push("CC1 cache の音色一覧が catalog と一致しません".into());
+            return;
+        }
+        self.cc1_observations = Arc::new(records);
+    }
+
+    pub fn cc1_assessment(&self, patch: &cmrt_core::PatchRef) -> Option<&cc1::Record> {
+        self.cc1_observations
+            .get(&patch.plugin)?
+            .get(&patch.display)
+    }
+
+    pub fn cc1_observation(&self, patch: &cmrt_core::PatchRef) -> Option<&cc1::Observation> {
+        self.cc1_assessment(patch).map(|record| &record.observation)
     }
 
     pub fn catalog_notes(&self) -> &[String] {
