@@ -82,6 +82,14 @@ fn restore_full_catalog() {
         );
         if let Some(restored) = restored {
             assert_eq!(restored.patch, patch.reference);
+            assert_eq!(
+                snapshot
+                    .cc1_pitch_change_patches()
+                    .contains(&patch.reference.display),
+                restored.pitch_change_likely,
+                "{:?}",
+                patch.reference
+            );
         }
     }
     let mut mismatched = snapshot.audio_patches()[0].reference.clone();

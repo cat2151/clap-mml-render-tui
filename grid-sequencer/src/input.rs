@@ -55,7 +55,7 @@ impl GridSequencerScreen {
         terminal_area: Rect,
         ctx: &GridSequencerContext<'_>,
     ) {
-        self.auto_reverb.observe(ctx.patch_load);
+        self.observe_patch_catalog(ctx);
         if self.chord_input.is_some() {
             self.cancel_mouse_gesture();
             return;

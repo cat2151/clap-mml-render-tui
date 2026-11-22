@@ -186,10 +186,11 @@ impl SupervisorBackend {
             .supervisor
             .set_connected_live_buffer_multiplier(current.max(ROW_PATCH_BUFFER_MULTIPLIER));
         let started = Instant::now();
-        let result = self.supervisor.prepare_live_patch_with_effect_chain(
+        let result = self.supervisor.prepare_live_patch_with_cc1_reset(
             instance_id,
             patch.wire().as_deref(),
             &patch.effect_chain,
+            patch.zero_cc1,
         );
         let _ = self
             .supervisor
@@ -310,10 +311,11 @@ fn prepare_instances(
     report_progress(0, patches.len());
     for (completed, (instance_id, patch)) in patches.iter().enumerate() {
         if let Err(error) = supervisor
-            .prepare_live_patch_with_effect_chain(
+            .prepare_live_patch_with_cc1_reset(
                 *instance_id,
                 patch.wire().as_deref(),
                 &patch.effect_chain,
+                patch.zero_cc1,
             )
             .with_context(|| {
                 format!(

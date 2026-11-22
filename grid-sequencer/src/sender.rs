@@ -50,6 +50,7 @@ pub use preload_estimate::GridPreloadEstimate;
 pub struct GridPatch {
     pub patch: Option<String>,
     pub effect_chain: String,
+    pub(crate) zero_cc1: bool,
 }
 
 impl GridPatch {
@@ -58,6 +59,7 @@ impl GridPatch {
         Self {
             patch: patch.map(str::to_string),
             effect_chain: String::new(),
+            zero_cc1: false,
         }
     }
 

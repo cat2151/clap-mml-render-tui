@@ -106,7 +106,7 @@ impl RealtimePlayServerSupervisor {
     /// 非演奏 bank への先読みには [`Self::prepare_standby_patch`] を使うこと。
     /// この crate の音色引数はすべて wire（`<パス><拡張子>:<タグ>`）。表示名は呼び出し側が変換する。
     pub fn prepare_live_patch(&self, instance_id: InstanceId, patch: Option<&str>) -> Result<()> {
-        self.prepare_patch_logged("shm-patch-prepare", instance_id, patch, "")
+        self.prepare_live_patch_with_effect_chain(instance_id, patch, "")
     }
 
     /// [`Self::prepare_live_patch`] に、その instance の出力に掛ける effect chain を同梱する。
@@ -120,23 +120,25 @@ impl RealtimePlayServerSupervisor {
         patch: Option<&str>,
         effect_chain: &str,
     ) -> Result<()> {
-        self.prepare_patch_logged("shm-patch-prepare", instance_id, patch, effect_chain)
+        self.prepare_live_patch_with_cc1_reset(instance_id, patch, effect_chain, false)
     }
 
-    fn prepare_patch_logged(
+    /// If requested, reset CC1 and clear the old patch's scheduled CC1 as part of the same load.
+    pub fn prepare_live_patch_with_cc1_reset(
         &self,
-        action: &str,
         instance_id: InstanceId,
         patch: Option<&str>,
         effect_chain: &str,
+        zero_cc1: bool,
     ) -> Result<()> {
+        let action = "shm-patch-prepare";
         let started = Instant::now();
         log_realtime_play_event(format!(
             "action={action} event=start instance={instance_id} patch={patch:?} \
              effect_chain={effect_chain:?}"
         ));
         let result = self.with_fast_client(|client| {
-            client.prepare_patch_with_effect_chain(instance_id, patch, effect_chain)
+            client.prepare_patch_with_cc1_reset(instance_id, patch, effect_chain, zero_cc1)
         });
         let elapsed_ms = started.elapsed().as_millis();
         match &result {

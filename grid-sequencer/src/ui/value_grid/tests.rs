@@ -51,7 +51,7 @@ fn sounding_screen() -> GridSequencerScreen {
 fn the_cc1_grid_shows_a_value_on_every_step() {
     let screen = sounding_screen();
 
-    let rendered = rendered_grid(&screen, " CC1 Modulation ", screen.state.cc1_display());
+    let rendered = rendered_grid(&screen, " CC1 Modulation ", &screen.state.cc1_display());
 
     assert!(rendered.contains("CC1 Modulation"), "{rendered}");
     assert!(

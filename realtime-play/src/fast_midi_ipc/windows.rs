@@ -119,8 +119,24 @@ impl FastMidiClient {
         patch: Option<&str>,
         effect_chain: &str,
     ) -> Result<(), FastIpcError> {
-        self.patch_request(KIND_PREPARE_PATCH, instance_id, patch, effect_chain)
-            .map(|_| ())
+        self.prepare_patch_with_cc1_reset(instance_id, patch, effect_chain, false)
+    }
+
+    pub(crate) fn prepare_patch_with_cc1_reset(
+        &mut self,
+        instance_id: InstanceId,
+        patch: Option<&str>,
+        effect_chain: &str,
+        zero_cc1: bool,
+    ) -> Result<(), FastIpcError> {
+        self.patch_request_with_id(
+            KIND_PREPARE_PATCH,
+            instance_id,
+            patch,
+            effect_chain,
+            zero_cc1,
+        )
+        .map(|_| ())
     }
 
     pub fn probe_patch(
@@ -220,7 +236,7 @@ impl FastMidiClient {
         patch: Option<&str>,
         effect_chain: &str,
     ) -> Result<Vec<u8>, FastIpcError> {
-        self.patch_request_with_id(kind, instance_id, patch, effect_chain)
+        self.patch_request_with_id(kind, instance_id, patch, effect_chain, false)
             .map(|(_, payload)| payload)
     }
 
@@ -235,6 +251,7 @@ impl FastMidiClient {
         instance_id: InstanceId,
         patch: Option<&str>,
         effect_chain: &str,
+        zero_cc1: bool,
     ) -> Result<(u32, Vec<u8>), FastIpcError> {
         validate_instance(instance_id)?;
         let patch_bytes = patch.map(str::as_bytes).unwrap_or_default();
@@ -257,6 +274,7 @@ impl FastMidiClient {
         slot.kind = kind;
         slot.request_id = request_id;
         slot.instance_id = u32::from(instance_id);
+        slot.buffer_multiplier = u32::from(zero_cc1);
         if patch.is_some() {
             slot.has_patch = 1;
             slot.patch_len = patch_bytes.len() as u32;

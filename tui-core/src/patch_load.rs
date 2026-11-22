@@ -4,7 +4,10 @@
 //! その途中経過を notepad（音色選択）と keyboard（patch catalog）の双方が読むため、
 //! 状態型だけをここに置く。スレッドの起動は所有者（app）が行う。
 
-use std::{collections::BTreeMap, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -66,6 +69,7 @@ pub struct PatchCatalogSnapshot {
     catalog_notes: Vec<String>,
     load_measurements: BTreeMap<String, PatchLoadMeasurement>,
     cc1_observations: Arc<BTreeMap<cmrt_core::PluginKey, BTreeMap<String, cc1::Record>>>,
+    cc1_pitch_change_patches: Arc<BTreeSet<String>>,
 }
 
 impl PatchCatalogSnapshot {
@@ -85,6 +89,7 @@ impl PatchCatalogSnapshot {
             catalog_notes,
             load_measurements,
             cc1_observations: Arc::default(),
+            cc1_pitch_change_patches: Arc::default(),
         };
         snapshot.rebuild_patch_roles(&[]);
         snapshot
@@ -164,6 +169,25 @@ impl PatchCatalogSnapshot {
             return;
         }
         self.cc1_observations = Arc::new(records);
+        self.cc1_pitch_change_patches = Arc::new(
+            self.audio_patches
+                .iter()
+                .filter(|patch| {
+                    self.cc1_assessment(&patch.reference)
+                        .is_some_and(|record| record.pitch_change_likely)
+                        && self
+                            .plugins
+                            .patch_ref(&patch.reference.display)
+                            .is_ok_and(|routed| routed == patch.reference)
+                })
+                .map(|patch| patch.reference.display.clone())
+                .collect(),
+        );
+    }
+
+    /// TUI が保持する音色表示名で、CC1 による音高変化が判定された音色を引く。
+    pub fn cc1_pitch_change_patches(&self) -> &Arc<BTreeSet<String>> {
+        &self.cc1_pitch_change_patches
     }
 
     pub fn cc1_assessment(&self, patch: &cmrt_core::PatchRef) -> Option<&cc1::Record> {

@@ -1,6 +1,7 @@
 use std::time::{Duration, Instant};
 
 use super::*;
+use crate::state::measure_lane::pattern::RampSpan;
 use crate::{step_offset, ChordPlayback, GRID_STEPS};
 
 fn messages_at(state: &mut GridState, now: Instant) -> Vec<[u8; 3]> {
@@ -140,4 +141,48 @@ fn the_display_covers_every_step_of_the_measure() {
     assert!(display.iter().all(Option::is_some), "{display:?}");
     // 小節頭は最初の note on の位置なので、ランプなら必ず2値のどちらか。
     assert!(matches!(display[0], Some(0 | 127)));
+}
+
+#[test]
+fn flagged_patch_and_preview_send_zero_even_when_the_measure_draws_nonzero() {
+    let now = Instant::now();
+    let mut state = GridState::with_instance_count(2);
+    state.cc1_pitch_change_patches = Arc::new(["vibrato".to_string()].into());
+    state.instances[0].patch = Some("vibrato".into());
+    state.instances[1].patch = Some("other".into());
+    state.start(now);
+    cc1_messages_at(&mut state, now);
+
+    // 全行の抽選値を確実に 0 より大きくして、無音の step でも送信と表示を検査する。
+    let triggers = [[false; GRID_STEPS]; 2];
+    state.cc1.draw_measure(
+        now,
+        MeasurePattern::Ramp { ascending: false },
+        &mut rand::rng(),
+        &triggers,
+        &[RampSpan::WHOLE_MEASURE; 2],
+    );
+    let drawn = state.cc1.value_at(1, 1);
+    assert!(drawn > 0);
+    assert_eq!(
+        cc1_messages_at(&mut state, now + step_offset(1)),
+        [(0, 0), (1, drawn)]
+    );
+    assert_eq!(state.cc1_display()[0], [Some(0); GRID_STEPS]);
+    assert_eq!(state.cc1_display()[1][1], Some(drawn));
+
+    state.set_cc1_preview_patch(Some((0, "other".into())));
+    let drawn = state.cc1.value_at(0, 2);
+    assert!(drawn > 0);
+    assert_eq!(
+        cc1_messages_at(&mut state, now + step_offset(2))[0],
+        (0, drawn)
+    );
+
+    state.set_cc1_preview_patch(Some((1, "vibrato".into())));
+    assert_eq!(
+        cc1_messages_at(&mut state, now + step_offset(3)),
+        [(0, 0), (1, 0)]
+    );
+    assert_eq!(state.cc1_display()[1], [Some(0); GRID_STEPS]);
 }

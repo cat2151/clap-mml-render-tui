@@ -313,6 +313,8 @@ impl GridSequencerScreen {
             return;
         }
         self.prepare_patch(instance, Some(&patch), "preview");
+        self.state
+            .set_cc1_preview_patch(Some((self.state.instance_id(instance), patch.clone())));
         let Some(selector) = self.patch_selector.as_mut() else {
             return;
         };
@@ -325,6 +327,7 @@ impl GridSequencerScreen {
         let Some(selector) = self.patch_selector.take() else {
             return;
         };
+        self.state.set_cc1_preview_patch(None);
         if selector.previewed_patch != selector.original_patch {
             self.prepare_patch(
                 selector.instance,
@@ -350,6 +353,7 @@ impl GridSequencerScreen {
         let Some(selector) = self.patch_selector.take() else {
             return;
         };
+        self.state.set_cc1_preview_patch(None);
         let instance = selector.instance;
         if !patch_is_available(&patch, selector.poly_only, ctx) {
             if selector.previewed_patch != selector.original_patch {

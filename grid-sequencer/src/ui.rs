@@ -116,7 +116,7 @@ fn draw_grids(
         f,
         layout.cc1,
         value_grid_title("CC1 Modulation", screen.state.cc1_pattern_label()),
-        screen.state.cc1_display(),
+        &screen.state.cc1_display(),
         &(0..screen.state.instance_count()).collect::<Vec<_>>(),
         screen,
         connection,

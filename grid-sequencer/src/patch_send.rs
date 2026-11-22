@@ -19,7 +19,7 @@ impl GridSequencerScreen {
         let patches = self
             .state
             .patches()
-            .map(|(instance_id, patch)| (instance_id, self.auto_reverb.patch(patch)))
+            .map(|(instance_id, patch)| (instance_id, self.patch_for_live_load(patch)))
             .collect::<Vec<_>>();
         #[cfg(test)]
         for (instance_id, patch) in &patches {
@@ -38,7 +38,7 @@ impl GridSequencerScreen {
         patch: Option<&str>,
         reason: &'static str,
     ) -> Option<u64> {
-        let patch = self.auto_reverb.patch(patch);
+        let patch = self.patch_for_live_load(patch);
         #[cfg(test)]
         self.record_sent_patch(reason, instance_id, &patch);
         self.midi_sender
@@ -54,6 +54,12 @@ impl GridSequencerScreen {
         if let Some(sender) = &self.midi_sender {
             sender.preload(instance_id, patch);
         }
+    }
+
+    fn patch_for_live_load(&self, patch: Option<&str>) -> crate::GridPatch {
+        let mut prepared = self.auto_reverb.patch(patch);
+        prepared.zero_cc1 = self.state.cc1_is_fixed(patch);
+        prepared
     }
 
     #[cfg(test)]

@@ -1,5 +1,6 @@
 use std::{
-    collections::VecDeque,
+    collections::{BTreeSet, VecDeque},
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -109,6 +110,8 @@ pub struct GridState {
     sounding: Vec<SoundingNote>,
     /// 小節ごとに抽選する CC1 と、実発音まで待たせる表示状態。
     cc1: measure_lane::MeasureLane,
+    cc1_pitch_change_patches: Arc<BTreeSet<String>>,
+    cc1_preview_patch: Option<(u8, String)>,
     /// 小節ごとに抽選する note velocity。CC1 と同じ仕組みで動く。
     velocity: measure_lane::MeasureLane,
     /// 組み立て済みで、まだ締切が来ていないステップの (締切, 列)。表示位置を
@@ -183,6 +186,8 @@ impl GridState {
                 cc1::CC1_CHOICES,
                 measure_lane::LaneCoverage::EveryStep,
             ),
+            cc1_pitch_change_patches: Arc::default(),
+            cc1_preview_patch: None,
             velocity: measure_lane::MeasureLane::new(
                 stored_lane_count,
                 velocity::VELOCITY_CHOICES,

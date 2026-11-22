@@ -195,6 +195,16 @@ impl FastMidiClient {
         Err(FastIpcError::UnsupportedPlatform)
     }
 
+    pub(crate) fn prepare_patch_with_cc1_reset(
+        &mut self,
+        _instance_id: InstanceId,
+        _patch: Option<&str>,
+        _effect_chain: &str,
+        _zero_cc1: bool,
+    ) -> Result<(), FastIpcError> {
+        Err(FastIpcError::UnsupportedPlatform)
+    }
+
     pub fn begin_standby_patch(
         &mut self,
         _instance_id: InstanceId,

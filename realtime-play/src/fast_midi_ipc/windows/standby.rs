@@ -159,6 +159,7 @@ impl FastMidiClient {
             instance_id,
             patch,
             effect_chain,
+            false,
         )?;
         self.standby.started(request_id, since_sequence);
         Ok((request_id, since_sequence))

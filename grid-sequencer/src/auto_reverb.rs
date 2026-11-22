@@ -85,6 +85,7 @@ impl GridAutoReverb {
                     _ => self.resolve(patch).effect_chain(),
                 })
                 .unwrap_or_default(),
+            zero_cc1: false,
         }
     }
 

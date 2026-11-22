@@ -134,7 +134,7 @@ impl GridSequencerScreen {
     /// 全 rest のままだと入った瞬間が無音になってしまうため、ここで一度ランダム化
     /// してからクロックを走らせる（`r` を押す前から演奏が始まっているのが仕様）。
     pub fn start(&mut self, now: Instant, ctx: &GridSequencerContext<'_>) {
-        self.auto_reverb.observe(ctx.patch_load);
+        self.observe_patch_catalog(ctx);
         self.cancel_mouse_gesture();
         self.help_open = false;
         self.close_history();
@@ -161,7 +161,7 @@ impl GridSequencerScreen {
 
     /// 直前の grid を保ったまま画面へ戻るときの初期化。
     pub fn resume(&mut self, now: Instant, ctx: &GridSequencerContext<'_>) {
-        self.auto_reverb.observe(ctx.patch_load);
+        self.observe_patch_catalog(ctx);
         self.cancel_mouse_gesture();
         self.help_open = false;
         self.close_history();
@@ -237,6 +237,7 @@ impl GridSequencerScreen {
     /// （[`GridSequencerScreen::advance_cycle_swap`]）とは別経路。
     fn prepare_connection(&mut self) {
         self.cancel_mouse_gesture();
+        self.state.set_cc1_preview_patch(None);
         self.send_prepare_all();
         if let Some(sender) = &self.midi_sender {
             sender.set_auto_gain_enabled(true);
@@ -270,7 +271,7 @@ impl GridSequencerScreen {
     /// セッションから復元した chord mode も、patch 一覧が揃うここで on にする。割り当てと
     /// 同じ prepare に相乗りさせるので、音色ロードは1回で済む。
     pub fn refresh_context(&mut self, ctx: &GridSequencerContext<'_>) {
-        self.auto_reverb.observe(ctx.patch_load);
+        self.observe_patch_catalog(ctx);
         self.patch_status = ctx.patch_status();
         if ctx.chord_source_updated && self.restart_notice.is_none() {
             self.restart_notice = Some(Instant::now());
@@ -307,7 +308,7 @@ impl GridSequencerScreen {
         if key.kind != KeyEventKind::Press {
             return GridSequencerAction::Continue;
         }
-        self.auto_reverb.observe(ctx.patch_load);
+        self.observe_patch_catalog(ctx);
         if self.bpm_input.is_some() {
             self.handle_bpm_input_key(key, now);
             return GridSequencerAction::Continue;
