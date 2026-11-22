@@ -1,16 +1,16 @@
 # clap-mml-render-tui
 
 ## Overview
-An MML TUI DAW (or similar). Easily enjoy the rich sounds of [Surge XT](https://surge-synthesizer.github.io/) / [Dexed](https://asb2m10.github.io/dexed/) / [Vaporizer2](https://www.vast-dynamics.com/?q=Vaporizer2) / [Floe](https://floe.audio/) / [Sforzando](https://www.plogue.com/products/sforzando.html) / [Six Sines](https://github.com/baconpaul/six-sines) / [TyrellN6](https://u-he.com/products/tyrelln6/) / [Zebralette3](https://u-he.com/products/zebralette3/) [JC-303](https://midilab.co/jc303/) / [TONE3000](https://www.tone3000.com/) / [Dragonfly Reverb](https://michaelwillis.github.io/dragonfly-reverb/) / [Voyage Voyage](https://www.musicalentropy.com/VoyageVoyage.html) / [Shu](https://mikey.audio/shu) / [METAL-GTX](https://unreal-instruments.wixsite.com/unreal-instruments/metal-gtx) with MML. Written in Rust.
+An MML TUI DAW (or similar) application. Easily enjoy the rich sounds of [Surge XT](https://surge-synthesizer.github.io/) / [Dexed](https://asb2m10.github.io/dexed/) / [Vaporizer2](https://www.vast-dynamics.com/?q=Vaporizer2) / [Floe](https://floe.audio/) / [Sforzando](https://www.plogue.com/products/sforzando.html) / [Six Sines](https://github.com/baconpaul/six-sines) / [TyrellN6](https://u-he.com/products/tyrelln6/) / [Zebralette3](https://u-he.com/products/zebralette3/) [JC-303](https://midilab.co/jc303/) / [OB-Xf](https://surge-synth-team.org/ob-xf/) / [Apricot](https://nakst.itch.io/apricot) [TONE3000](https://www.tone3000.com/) / [Dragonfly Reverb](https://michaelwillis.github.io/dragonfly-reverb/) / [Voyage Voyage](https://www.musicalentropy.com/VoyageVoyage.html) / [Shu](https://mikey.audio/shu) / [METAL-GTX](https://unreal-instruments.wixsite.com/unreal-instruments/metal-gtx) using MML. Written in Rust.
 
 ## Download
 
 [Download Windows version](https://github.com/cat2151/clap-mml-render-tui/releases/download/v0.1.0/clap-mml-render-tui-0.1.0-windows-x64.zip)
 
-## Purpose
+## Usage
 
 - For playing around with sounds using MML (Music Macro Language)
-- For personal use. Experimental project.
+- For personal use. An experimental project.
 
 ## Technical Stack
 - Plugin host library
@@ -24,26 +24,26 @@ Please install [Surge XT](https://surge-synthesizer.github.io/)
 winget install "Surge XT"
 ```
 
-※ Under consideration: Automation of the above (already implemented in `cat-plugin-player`)
+※Under consideration: Automation of the above (already implemented in cat-plugin-player)
 
-## Running
+## Run
 
 ```
 cmrt
 ```
 
-You can input MML in the TUI screen and play around.
+You can input MML in the TUI screen and play around with it.
 
 ## Patch Catalog
 
-Creates a patch catalog for Dexed and other plugins. This makes it easier to select patches for supported audio plugins.
+Creates a patch catalog for Dexed and other plugins. This allows you to easily select patches from supported audio plugins.
 
 ```
 cmrt build-patch-catalog-cache
 ```
 
 ## Supported Audio Plugins
-- ※ Limited to plugins that are CLAP, run on Windows, and are available for free without account registration.
+- ※Limited to CLAP, Windows, and freely available plugins without account registration.
 - [Surge XT](https://surge-synthesizer.github.io/)
 - [Dexed](https://asb2m10.github.io/dexed/)
 - [Vaporizer2](https://www.vast-dynamics.com/?q=Vaporizer2)
@@ -53,18 +53,20 @@ cmrt build-patch-catalog-cache
 - [TyrellN6](https://u-he.com/products/tyrelln6/)
 - [Zebralette3](https://u-he.com/products/zebralette3/)
 - [JC-303](https://midilab.co/jc303/)
-- effect (can be inserted in series on tracks in DAW mode)
+- [OB-Xf](https://surge-synth-team.org/ob-xf/)
+- [Apricot](https://nakst.itch.io/apricot)
+- Effects (can be inserted in series into tracks in DAW mode)
   - [TONE3000](https://www.tone3000.com/)
-  - Surge XT Effects (included with Surge XT)
+  - Surge XT Effects (bundled with Surge XT)
   - [Dragonfly Reverb](https://michaelwillis.github.io/dragonfly-reverb/)
   - [Voyage Voyage](https://www.musicalentropy.com/VoyageVoyage.html)
   - [Shu](https://mikey.audio/shu)
 - sfz (those with a dedicated screen to try key switches and control changes)
   - [METAL-GTX](https://unreal-instruments.wixsite.com/unreal-instruments/metal-gtx) 
-- sfz (Drum kit)
-  - Any sfz drum kit should be automatically supported.
-- Download pages for each (for those who got lost)
-  - Surge XT: Easy to get with winget: [Fastest! How to install DAW and audio plugins even for cats (up to playing sound with a virtual MIDI keyboard)](https://cat2151.hatenadiary.jp/entry/2026/03/12/225148)
+- sfz (Drum kits)
+  - I believe all sfz drum kits are automatically supported.
+- Individual Download Pages (for reference)
+  - Surge XT : Easy to get with winget : [Fastest! DAW and Audio Plugins that even a cat can install (up to playing sounds with a virtual MIDI keyboard)](https://cat2151.hatenadiary.jp/entry/2026/03/12/225148)
   - [Dexed (introduction page on studiorack-site)](https://studiorack.github.io/studiorack-site/plugins/asb2m10/dexed)
   - [Vaporizer2 (introduction page on studiorack-site)](https://studiorack.github.io/studiorack-site/plugins/vastdynamics/vaporizer2)
   - [Floe Download Page](https://floe.audio/download/)
@@ -73,46 +75,47 @@ cmrt build-patch-catalog-cache
   - [TyrellN6](https://u-he.com/products/tyrelln6/)
   - [Zebralette3](https://u-he.com/products/zebralette3/)
   - [JC-303](https://midilab.co/jc303/)
+  - [OB-Xf](https://surge-synth-team.org/ob-xf/)
+  - [Apricot](https://nakst.itch.io/apricot)
   - [TONE3000 Download Page](https://www.tone3000.com/plugin/download)
   - [Dragonfly Reverb GitHub Releases Page](https://github.com/michaelwillis/dragonfly-reverb/releases)
   - [Voyage Voyage](https://www.musicalentropy.com/VoyageVoyage.html)
   - [Shu](https://mikey.audio/shu)
   - [METAL-GTX](https://unreal-instruments.wixsite.com/unreal-instruments/metal-gtx) 
 
-## Playing SNS posts as music
+## Play SNS Posts as Music
 
 ```
 cmrt --server
 ```
 
-For details, please refer to [bluesky-text-to-audio](https://github.com/cat2151/bluesky-text-to-audio/blob/main/README.ja.md)
+For details, please refer to [bluesky-text-to-audio](https://github.com/cat2151/bluesky-text-to-audio/blob/main/README.ja.md).
 
 ## Breaking Changes
-- Frequent breaking changes occur daily. It is common for something that worked yesterday not to work today.
+- Breaking changes are made frequently on a daily basis. It is common for something that worked yesterday to not work today.
 
 ## Concept Notes
-- `アトミック小節` (Atomic Measure/Bar)
-  - `アトミック小節` is a concept inspired by Obsidian's atomic notes.
-  - By making the unit of all processing 'offline rendering in 1-measure units',
-  - while imposing constraints,
-  - various benefits can be gained.
-  - This is suitable for sketching purposes and for quickly iterating on edits.
-  - For more serious editing, existing feature-rich DAWs would be more appropriate.
-  - *Note: The term `アトミック小節` is kept in Japanese as a direct translation to "atomic measure" might sound like a physics term.*
-- Experimentation
-  - Various experiments will be implemented.
+- Atomic Measures
+    - Inspired by Obsidian's Atomic Notes.
+    - By making the unit of all processing "offline rendering in one-measure increments",
+    - while imposing constraints,
+    - various benefits can be gained.
+    - This is suitable for sketching purposes and for quickly iterating through editing cycles.
+    - For more serious editing, existing feature-rich DAWs would be more suitable.
+- Experiments
+    - Various experiments will be implemented.
 - Modular
-  - Various features are implemented as separate library crates.
-  - This is intended to make it smoother for other projects to use them.
-  - However, the benefits feel minimal compared to the increased test build time. Well, consider it a worthwhile experiment to visualize this outcome.
-- Personal Use Only
-  - Frequent breaking changes are made.
-  - It is common for files saved yesterday not to load today.
-  - Therefore, please limit its use to an experimental/toy level.
+    - Various functionalities are implemented in separate library crates.
+        - This is intended to facilitate use from other projects.
+            - However, the benefits feel thin compared to the increased test build time. Well, you could say it's valuable if it yielded experimental results that visualize this.
+- For Personal Use
+    - Breaking changes are made frequently.
+        - It is common for files saved yesterday to not be loadable today.
+            - Therefore, please limit its use to toy-level projects.
 
 ## Notes for Rust Users
 
-If you install with cargo, you can easily get the latest version via self-update.
+Installing with cargo allows for easy updates to the latest version via self-update.
 
 ``` 
 cargo install --force --git https://github.com/cat2151/clap-mml-render-tui
