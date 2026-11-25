@@ -158,7 +158,7 @@ jobs:
         run: |
           import glob, os, pathlib, zipfile
           build_root = pathlib.Path('clap-mml-render-tui/target/release/build').resolve()
-          crate_dirs = sorted(build_root.glob('rubberband-ffi-*'))
+          crate_dirs = sorted(build_root.glob('rubberband-ffi/*'))
           print(f'Package working directory: {pathlib.Path.cwd()}')
           print(f'Cargo build output directory: {build_root} (exists={build_root.is_dir()})')
           print(f'Rubber Band build directories: {[str(path) for path in crate_dirs]}')
@@ -167,7 +167,7 @@ jobs:
           copying_files = sorted(build_root.rglob('COPYING')) if build_root.is_dir() else []
           print(f'COPYING files under Cargo build output: {[str(path) for path in copying_files]}')
           # One build-script output dir per build configuration; all fetch the same pinned commit.
-          copying = glob.glob('clap-mml-render-tui/target/release/build/rubberband-ffi-*/out/rubberband-src/COPYING')
+          copying = glob.glob('clap-mml-render-tui/target/release/build/rubberband-ffi/*/out/rubberband-src/COPYING')
           if not copying or len({pathlib.Path(p).read_bytes() for p in copying}) != 1:
               raise SystemExit(f'Expected one Rubber Band COPYING text at the expected path, found: {copying}')
           files = {
