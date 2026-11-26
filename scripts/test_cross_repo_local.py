@@ -1,8 +1,13 @@
+import sys
 from argparse import Namespace
+from pathlib import Path
 from unittest import TestCase
 from unittest.mock import patch
 
-from scripts import cross_repo_local
+# cross_repo_local は script として直に走らせる前提で、隣の module を素の名前で import する。
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import cross_repo_local  # noqa: E402
 
 
 class AutoOffForCommitTests(TestCase):

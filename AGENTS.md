@@ -38,7 +38,7 @@ The setup script installs the Linux packages needed for this workspace's `rodio`
 - ビルドロック回避を含め、`--target-dir`等で既定以外のtargetディレクトリを作成・使用することを禁止
 
 # rustソースを変更して作業完了報告時
-- 450行をoverした*.rsは、単一責任の原則に従いファイル分割
+- 450行をoverした*.rsと*.pyは、単一責任の原則に従いファイル分割
 - cargoのclippyとfmtを使うこと
 - リリースビルド（ cargo build --release ）をすること
   - もし local ../clap-mml-play-server/ をメンテした場合、 ../clap-mml-play-server/ のリリースビルドをすること

@@ -53,12 +53,13 @@ import argparse
 import json
 import os
 import re
-import struct
 import sys
 from collections import defaultdict
 from pathlib import Path
 
 import daw_log_sent_rows
+from daw_cache_wav import WavError, read_wav_info
+from daw_project import FIRST_PLAYABLE_TRACK, FIRST_SAVED_PLAYABLE_TRACK, Project, load_project
 
 APP_DIR_NAME = "clap-mml-render-tui"
 DAW_CACHE_DIR_NAME = "daw_cache"
@@ -67,11 +68,6 @@ DAILY_DIR_NAME = "daily"
 CACHE_WAV_RE = re.compile(r"^track(\d+)_meas(\d+)\.wav$", re.IGNORECASE)
 # 余韻の尾の既定値（フレーム）。実測 2.0 秒 @48kHz。**判定には既定で使わない**。
 DEFAULT_TAIL_FRAMES = 96_000
-# グリッド行 index の割り当て（daw/src/tracks.rs）。
-TEMPO_TRACK = 0
-CHORD_TRACK = 1
-FIRST_PLAYABLE_TRACK = 2
-FIRST_SAVED_PLAYABLE_TRACK = 1
 # 実測のフレーム数は丸めで ±1 ずれうる。
 FRAME_TOLERANCE = 1
 
@@ -107,201 +103,6 @@ def default_log_path() -> Path:
     """実アプリのデバッグログ（`cmrt_runtime::paths::log_file_path` と同じ場所）。"""
     return local_app_dir() / "log" / "log.txt"
 
-
-# ─── WAV ─────────────────────────────────────────────────────
-
-
-class WavError(Exception):
-    pass
-
-
-def read_wav_info(path: Path) -> dict:
-    """RIFF を実際に読んでフォーマットとフレーム数を返す。
-
-    **ファイルサイズを 8 で割るだけで済ませないこと。** ヘッダは
-    `WAVE_FORMAT_EXTENSIBLE`（fmt チャンク 40 バイト）で 68 バイトあるが、
-    そこを前提にすると別の書き手の WAV で静かに間違える。
-    """
-    with path.open("rb") as handle:
-        header = handle.read(12)
-        if len(header) < 12 or header[0:4] != b"RIFF" or header[8:12] != b"WAVE":
-            raise WavError("RIFF/WAVE ではない")
-        fmt: tuple | None = None
-        data_bytes: int | None = None
-        while True:
-            chunk = handle.read(8)
-            if len(chunk) < 8:
-                break
-            chunk_id = chunk[0:4]
-            chunk_size = struct.unpack("<I", chunk[4:8])[0]
-            if chunk_id == b"fmt ":
-                body = handle.read(chunk_size)
-                if len(body) < 16:
-                    raise WavError("fmt チャンクが短い")
-                fmt = struct.unpack("<HHIIHH", body[:16])
-            elif chunk_id == b"data":
-                # data のサイズはヘッダの申告値。実体が足りない（＝書き込み中に
-                # 読んだ）なら、そこが分かるように弾く。
-                start = handle.tell()
-                actual = max(0, path.stat().st_size - start)
-                if chunk_size > actual:
-                    raise WavError(f"data が申告より短い（申告 {chunk_size} / 実体 {actual}）")
-                if chunk_size == 0:
-                    # **本物の「書き込み途中」はこの形で見える**（Stage 5 で実測）。
-                    # 書き手（play server の `write_wav` → hound `WavWriter`）は
-                    # data チャンク長を **0 で書き出し、`finalize()` のときだけ**
-                    # 本当の長さへ書き戻す。だから途中経過は「申告より短い」ではなく
-                    # **「申告 0 なのに本体が在る」**になる。上の分岐だけでは拾えない
-                    # （申告のほうが小さいので）。
-                    raise WavError(
-                        f"data チャンク長が 0（書き込み途中。本体は {actual} バイト在る）"
-                        if actual > 0
-                        else "data チャンク長が 0（音が 1 フレームも入っていない）"
-                    )
-                data_bytes = chunk_size
-                break
-            else:
-                handle.seek(chunk_size + (chunk_size & 1), 1)
-        if fmt is None:
-            raise WavError("fmt チャンクが無い")
-        if data_bytes is None:
-            raise WavError("data チャンクが無い")
-    _tag, channels, sample_rate, _byte_rate, block_align, bits = fmt
-    if block_align <= 0:
-        raise WavError("block_align が 0")
-    return {
-        "channels": channels,
-        "sample_rate": sample_rate,
-        "bits": bits,
-        "block_align": block_align,
-        "frames": data_bytes // block_align,
-    }
-
-
-# ─── project（current.json） ─────────────────────────────────
-
-
-def grid_row_from_saved_track(saved_track: int) -> int:
-    """保存ファイルの track 番号 → グリッドの行 index（`daw/src/tracks.rs` と同じ規則）。"""
-    if saved_track == TEMPO_TRACK:
-        return TEMPO_TRACK
-    return saved_track + (FIRST_PLAYABLE_TRACK - FIRST_SAVED_PLAYABLE_TRACK)
-
-
-def strip_json_prefix(cell: str) -> str:
-    """セル先頭の JSON を落として MML 本体だけにする（`split_mml_fragment` 相当）。"""
-    text = cell.strip()
-    if not text.startswith("{"):
-        return text
-    depth = 0
-    in_str = False
-    escaped = False
-    for index, char in enumerate(text):
-        if in_str:
-            if escaped:
-                escaped = False
-            elif char == "\\":
-                escaped = True
-            elif char == '"':
-                in_str = False
-            continue
-        if char == '"':
-            in_str = True
-        elif char == "{":
-            depth += 1
-        elif char == "}":
-            depth -= 1
-            if depth == 0:
-                return text[index + 1 :]
-    return ""
-
-
-def json_prefix(cell: str) -> dict:
-    """セル先頭の JSON を dict で返す。JSON が無い／壊れていれば空 dict。"""
-    text = cell.strip()
-    if not text.startswith("{"):
-        return {}
-    body = text[: len(text) - len(strip_json_prefix(cell))]
-    try:
-        value = json.loads(body)
-    except json.JSONDecodeError:
-        return {}
-    return value if isinstance(value, dict) else {}
-
-
-class Project:
-    """`current.json` の中身を、グリッドの行 index で引ける形に均したもの。"""
-
-    def __init__(self, path: Path, raw: dict):
-        self.path = path
-        self.page_date: str | None = raw.get("page_date")
-        project = ((raw.get("project_file") or {}).get("project")) or {}
-        self.cells: dict[int, dict[int, str]] = defaultdict(dict)
-        for track in project.get("tracks") or []:
-            row = grid_row_from_saved_track(int(track.get("track_index", 0)))
-            for cell in track.get("non_empty_cells") or []:
-                self.cells[row][int(cell.get("measure_index", 0))] = cell.get("mml") or ""
-        for cell in ((project.get("chord_track") or {}).get("non_empty_cells")) or []:
-            self.cells[CHORD_TRACK][int(cell.get("measure_index", 0))] = cell.get("mml") or ""
-        self.cached_measures = [
-            (int(entry.get("track", -1)), int(entry.get("measure", -1)))
-            for entry in raw.get("cached_measures") or []
-        ]
-
-    def conductor_text(self) -> str:
-        cells = self.cells.get(TEMPO_TRACK, {})
-        return "".join(strip_json_prefix(cells[measure]) for measure in sorted(cells))
-
-    def beat_numerator(self) -> int:
-        """`{"beat": "4/4"}` → 4。読めなければ 4（`parse_beat_numerator` と同じ）。"""
-        for measure in sorted(self.cells.get(TEMPO_TRACK, {})):
-            beat = json_prefix(self.cells[TEMPO_TRACK][measure]).get("beat")
-            if isinstance(beat, str):
-                head = beat.split("/")[0]
-                if head.isdigit():
-                    return max(1, int(head))
-        return 4
-
-    def bpm(self) -> float:
-        """conductor 行を繋いだ本体から最初の `t<整数>` を拾う（`parse_tempo_bpm` と同じ）。"""
-        match = re.search(r"t(\d+)", self.conductor_text())
-        bpm = float(match.group(1)) if match else 120.0
-        return min(960.0, max(1.0, bpm))
-
-    def measure_frames(self, sample_rate: int) -> int:
-        """今日の 1 小節のフレーム数（`compute_measure_samples` / 2 と同じ値）。"""
-        seconds = self.beat_numerator() * 60.0 / self.bpm()
-        interleaved = round(seconds * sample_rate * 2.0)
-        interleaved += interleaved & 1
-        return interleaved // 2
-
-    def cell_has_content(self, row: int, measure: int) -> bool:
-        """そのセルが「鳴る中身」を持つか（`daw/src/mml.rs` の `cell_has_content` 相当）。
-
-        **`non_empty_cells` が空でも鳴ることがある。** init セルに
-        `generate from chord track` があれば、その行の各小節は chord 行から生成される。
-        """
-        if measure == 0 or row < FIRST_PLAYABLE_TRACK:
-            return False
-        if self.cells.get(row, {}).get(measure, "").strip():
-            return True
-        init = self.cells.get(row, {}).get(0, "")
-        if not json_prefix(init).get("generate from chord track"):
-            return False
-        return bool(self.cells.get(CHORD_TRACK, {}).get(measure, "").strip())
-
-    def rows_with_content(self) -> set[int]:
-        rows = set()
-        highest_row = max(self.cells, default=0)
-        for row in range(FIRST_PLAYABLE_TRACK, highest_row + 1):
-            measures = set(self.cells.get(row, {})) | set(self.cells.get(CHORD_TRACK, {}))
-            if any(self.cell_has_content(row, m) for m in measures if m > 0):
-                rows.add(row)
-        return rows
-
-
-def load_project(path: Path) -> Project:
-    return Project(path, json.loads(path.read_text(encoding="utf-8")))
 
 
 # ─── 走査 ────────────────────────────────────────────────────
