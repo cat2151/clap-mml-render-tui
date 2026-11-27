@@ -28,9 +28,9 @@ fn complete_track_rerender_batch_uses_available_worker_slots_while_playing() {
     };
     {
         let mut cache_guard = cache.lock().unwrap();
-        for measure in 2..=4 {
-            cache_guard[2][measure].state = super::CacheState::Pending;
-            cache_guard[2][measure].generation = 1;
+        for cell in &mut cache_guard[2][2..=4] {
+            cell.state = super::CacheState::Pending;
+            cell.generation = 1;
         }
     }
     batches.lock().unwrap()[2] = Some(TrackRerenderBatch {
@@ -110,9 +110,9 @@ fn complete_track_rerender_batch_respects_global_worker_limit_across_tracks() {
         let mut cache_guard = cache.lock().unwrap();
         cache_guard[2][2].state = super::CacheState::Pending;
         cache_guard[2][2].generation = 1;
-        for measure in 2..=4 {
-            cache_guard[3][measure].state = super::CacheState::Pending;
-            cache_guard[3][measure].generation = 1;
+        for cell in &mut cache_guard[3][2..=4] {
+            cell.state = super::CacheState::Pending;
+            cell.generation = 1;
         }
     }
     batches.lock().unwrap()[2] = Some(TrackRerenderBatch {

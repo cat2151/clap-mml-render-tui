@@ -252,9 +252,9 @@ fn complete_track_rerender_batch_respects_cache_render_worker_limit() {
     };
     {
         let mut cache_guard = cache.lock().unwrap();
-        for measure in 3..=4 {
-            cache_guard[2][measure].state = super::CacheState::Pending;
-            cache_guard[2][measure].generation = 1;
+        for cell in &mut cache_guard[2][3..=4] {
+            cell.state = super::CacheState::Pending;
+            cell.generation = 1;
         }
     }
     batches.lock().unwrap()[2] = Some(TrackRerenderBatch {

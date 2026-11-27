@@ -73,11 +73,15 @@ impl DawApp {
     pub(super) fn sync_cache_states(&self) {
         let mut cache = self.cache.lock().unwrap();
         for t in 0..self.editor.tracks {
-            for m in 0..=self.editor.measures {
+            for (m, cell) in cache[t]
+                .iter_mut()
+                .enumerate()
+                .take(self.editor.measures + 1)
+            {
                 if m == 0 || !track_renders_audio(t) || !cell_has_content(&self.editor.data, t, m) {
-                    cache[t][m] = CellCache::empty();
-                } else if cache[t][m].state == CacheState::Empty {
-                    cache[t][m].set_pending();
+                    *cell = CellCache::empty();
+                } else if cell.state == CacheState::Empty {
+                    cell.set_pending();
                 }
             }
         }
@@ -171,14 +175,19 @@ impl DawApp {
             // track0 セル変更: 全演奏トラックの全小節が影響を受ける
             let mut cache = self.cache.lock().unwrap();
             for t in FIRST_PLAYABLE_TRACK..self.editor.tracks {
-                for m in 1..=self.editor.measures {
+                for (m, cell) in cache[t]
+                    .iter_mut()
+                    .enumerate()
+                    .take(self.editor.measures + 1)
+                    .skip(1)
+                {
                     if !cell_has_content(&self.editor.data, t, m) {
-                        cache[t][m] = CellCache::empty();
+                        *cell = CellCache::empty();
                     } else {
                         if let Some(path) = cache_wav_path(self.workspace_kind, t, m) {
                             let _ = std::fs::remove_file(path);
                         }
-                        cache[t][m].set_pending();
+                        cell.set_pending();
                         affected.push((t, m));
                     }
                 }
@@ -212,14 +221,19 @@ impl DawApp {
         } else if measure == 0 && track_renders_audio(track) {
             // 音色セル（data[track][0]）変更: 同トラックの全小節が影響を受ける（issue #67 参照）
             let mut cache = self.cache.lock().unwrap();
-            for m in 1..=self.editor.measures {
+            for (m, cell) in cache[track]
+                .iter_mut()
+                .enumerate()
+                .take(self.editor.measures + 1)
+                .skip(1)
+            {
                 if !cell_has_content(&self.editor.data, track, m) {
-                    cache[track][m] = CellCache::empty();
+                    *cell = CellCache::empty();
                 } else {
                     if let Some(path) = cache_wav_path(self.workspace_kind, track, m) {
                         let _ = std::fs::remove_file(path);
                     }
-                    cache[track][m].set_pending();
+                    cell.set_pending();
                     affected.push((track, m));
                 }
             }
@@ -259,7 +273,12 @@ impl DawApp {
     pub(super) fn restore_cache_from_metadata(&self, cached_measures: &[DawCachedMeasure]) {
         let mut cache = self.cache.lock().unwrap();
         for t in 0..self.editor.tracks {
-            for m in 1..=self.editor.measures {
+            for (m, cell) in cache[t]
+                .iter_mut()
+                .enumerate()
+                .take(self.editor.measures + 1)
+                .skip(1)
+            {
                 let Some(saved) = cached_measures
                     .iter()
                     .find(|entry| entry.track == t && entry.measure == m)
@@ -281,32 +300,32 @@ impl DawApp {
                         if info.spec.sample_rate == self.cfg.sample_rate as u32
                             && info.spec.channels == 2 =>
                     {
-                        cache[t][m].state = CacheState::Ready;
-                        cache[t][m].rendered_mml_hash = Some(saved.mml_hash);
+                        cell.state = CacheState::Ready;
+                        cell.rendered_mml_hash = Some(saved.mml_hash);
                         if info.interleaved_sample_count <= super::MAX_CACHED_SAMPLES {
                             match cmrt_tui_core::wav_io::load_wav_samples(&path) {
                                 Ok(samples) => {
-                                    cache[t][m].samples = Some(std::sync::Arc::new(samples));
-                                    cache[t][m].rendered_measure_samples =
+                                    cell.samples = Some(std::sync::Arc::new(samples));
+                                    cell.rendered_measure_samples =
                                         Some(self.measure_duration_samples());
                                 }
                                 Err(_) => {
-                                    cache[t][m].state = CacheState::Pending;
-                                    cache[t][m].samples = None;
-                                    cache[t][m].rendered_measure_samples = None;
-                                    cache[t][m].rendered_mml_hash = None;
+                                    cell.state = CacheState::Pending;
+                                    cell.samples = None;
+                                    cell.rendered_measure_samples = None;
+                                    cell.rendered_mml_hash = None;
                                 }
                             }
                         } else {
-                            cache[t][m].samples = None;
-                            cache[t][m].rendered_measure_samples = None;
+                            cell.samples = None;
+                            cell.rendered_measure_samples = None;
                         }
                     }
                     Ok(_) | Err(_) => {
-                        cache[t][m].state = CacheState::Pending;
-                        cache[t][m].samples = None;
-                        cache[t][m].rendered_measure_samples = None;
-                        cache[t][m].rendered_mml_hash = None;
+                        cell.state = CacheState::Pending;
+                        cell.samples = None;
+                        cell.rendered_measure_samples = None;
+                        cell.rendered_mml_hash = None;
                     }
                 }
             }
@@ -317,10 +336,15 @@ impl DawApp {
         let cache = self.cache.lock().unwrap();
         let mut cached_measures = Vec::new();
         for t in 0..self.editor.tracks {
-            for m in 1..=self.editor.measures {
+            for (m, cell) in cache[t]
+                .iter()
+                .enumerate()
+                .take(self.editor.measures + 1)
+                .skip(1)
+            {
                 let current_mml_hash = daw_cache_mml_hash(&self.build_cell_mml(t, m));
-                if cache[t][m].state == CacheState::Ready
-                    && cache[t][m].rendered_mml_hash == Some(current_mml_hash)
+                if cell.state == CacheState::Ready
+                    && cell.rendered_mml_hash == Some(current_mml_hash)
                     && cell_has_content(&self.editor.data, t, m)
                 {
                     cached_measures.push(DawCachedMeasure {

@@ -101,9 +101,9 @@ fn rows_sharing_a_step_sound_together_in_row_order() {
 fn messages_of_one_step_share_the_same_offset() {
     let now = Instant::now();
     let mut state = GridState::silent();
-    for row in 0..4 {
-        state.instances[row].base_note = 60 + row as u8;
-        state.instances[row].pattern.draw_span(1, 1);
+    for (row, instance) in state.instances.iter_mut().enumerate().take(4) {
+        instance.base_note = 60 + row as u8;
+        instance.pattern.draw_span(1, 1);
     }
     state.start(now);
     state.poll_steps(now, Duration::ZERO);

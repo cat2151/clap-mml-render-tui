@@ -52,6 +52,11 @@ pub fn get_text() -> Option<String> {
     arboard::Clipboard::new().ok()?.get_text().ok()
 }
 
+// test-support はスタブ実装で arboard を呼ばないが、依存自体は prod 用に残るため、
+// cargo の unused_dependencies に使用扱いさせる。
+#[cfg(feature = "test-support")]
+use arboard as _;
+
 #[cfg(feature = "test-support")]
 use std::cell::RefCell;
 

@@ -67,9 +67,7 @@ impl NotePattern {
         }
         // startが既存noteのTieでも、独立した新しいAttackを置けばそこでretriggerする。
         self.steps[start] = NoteStep::Attack;
-        for step in start + 1..=end {
-            self.steps[step] = NoteStep::Tie;
-        }
+        self.steps[start + 1..=end].fill(NoteStep::Tie);
         self.normalize();
         *self != before
     }
